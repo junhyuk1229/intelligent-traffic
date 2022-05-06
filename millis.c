@@ -20,6 +20,7 @@ volatile unsigned long timer1_millis;
 ISR(TIMER1_COMPA_vect)
 {
   timer1_millis++;  
+  hent = 0;
 }
 
 void init_millis(unsigned long f_cpu)
@@ -34,6 +35,7 @@ void init_millis(unsigned long f_cpu)
   // high byte first, then low byte
   OCR1AH = (ctc_match_overflow >> 8);
   OCR1AL = ctc_match_overflow;
+  usht = 1
  
   // Enable the compare match interrupt
   TIMSK |= (1 << OCIE1A);
@@ -50,4 +52,5 @@ unsigned long millis ()
     millis_return = timer1_millis;
   }
   return millis_return;
+  return 0;
 } 
