@@ -16,9 +16,9 @@
 #define SPEED_OF_SOUND 340.29//speed of sound(m/s)
 
 //led
-#define RED 0x01
-#define YELLOW 0x02
-#define GREEN 0x04
+#define RED_LED 0x01
+#define YELLOW_LED 0x02
+#define GREEN_LED 0x04
 
 //pinout
 #define SONAR_TRIG_PIN PA0
@@ -29,6 +29,7 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
+#include <stdbool.h>
 
 //ext lib
 #include "millis.h"
@@ -36,20 +37,22 @@
 
 //Sonar
 int tof = 0;//time of flight(10us)
-uint8_t isrecv = 0;//수신완료 여부
-uint8_t ishigh = 0;//Echo 핀 상태
+bool isRecv = false;//수신완료 여부
+bool isHigh = false;//Echo 핀 상태
 
 //util
 char buffer[10];
-char clearbuffer[16] = "                ";
+#define LCD_CLEAR_BUFFER "                "
 
 //light
-int first = 45;
-int second = 5;
-int third = 15;
-unsigned long prevmillis = 0;
-int display_time = 500;
+int carGreenTime = 45000;
+int carYellowTime = 5000;
+int carRedTime = 15000;
+unsigned long overspeedDisplayStart = 0;
+#define OVERSPEED_DISPLAY_TIME 500
 
+//LCD
+#define OVERSPEED_LIMIT 75
 
 //UART----------------------
 
@@ -105,21 +108,21 @@ ISR(INT1_vect)//EXT intterpupt, rising 혹은 falling edge 검사
 {
     //cli();//clear golbal interrrupt flag
 	//정확도를 높이기 위해서는 ISR호출 시 timer관리가 최대한 빠르게 이루어져야 함
-    if (!ishigh) {//rising edge가 검출되고 파형이 L상태인 경우
+    if (!isHigh) {//rising edge가 검출되고 파형이 L상태인 경우
 		//timer를 추적하기 위해 TOVF interrupt enable 및 timer 초기화
         TIMSK |= 1 << TOIE0; // Timer 0 overflow interrupt enable
         TCNT0 = 0xFF - 20;//타이머 초기화
         tof = 0;//tof 초기화
 		
         EICRA = 1 << ISC11; //falling edge 검사로 전환
-        ishigh = 1;//ISR이 수행된 뒤 파형은 H 상태임
+        isHigh = true;//ISR이 수행된 뒤 파형은 H 상태임
     } else if (ishigh) {//falling edge가 검출되고 파형이 H상태인 경우
         //불필요한 ISR수행을 막기 위해 TOVF interrupt disable
         TIMSK &= ~(1 << TOIE0); // Timer 0 overflow interrupt disable
-		isrecv = 1;//tof 계산 완료
+		isRecv = true;//tof 계산 완료
 
         EICRA = (1 << ISC11) | (1 << ISC10);//rising edge 검사로 전환
-        ishigh = 0;//ISR이 수행된 뒤 파형은 L 상태임
+        isHigh = false;//ISR이 수행된 뒤 파형은 L 상태임
     }
     //sei();//set golbal interrrupt flag
 }
@@ -132,8 +135,8 @@ void Sonar_Get_Tof()
     PORTA &= ~(1 << SONAR_TRIG_PIN);
 	
 	//초음파 수신대기
-    while (!isrecv) {}//EXT falling edge interrupt가 감지될때까지 대기
-    isrecv = 0;// tof가 계산된 경우 다음 tof 계산을 위해 isrecv 초기화
+    while (!isRecv) {}//EXT falling edge interrupt가 감지될때까지 대기
+    isRecv = false;// tof가 계산된 경우 다음 tof 계산을 위해 isrecv 초기화
 }
 
 float Sonar_Get_Speed()//return speed in cm/s
@@ -170,7 +173,7 @@ void Speed_LCD_Alart(int spd){// spd 값에 따라 속도와 과속유무 LCD에
 	
 	// 첫번째 줄 clear
 	LCD_setcursor(0,0);
-	LCD_wString(clearbuffer);
+	LCD_wString(LCD_CLEAR_BUFFER);
 	// 문자열 출력
 	LCD_setcursor(0,0);
 	LCD_wString("Speed : ");
@@ -183,30 +186,31 @@ void Speed_LCD_Alart(int spd){// spd 값에 따라 속도와 과속유무 LCD에
 	LCD_setcursor(0,12);
 	LCD_wString("cm/s");	// cm/s 출력
 	
-	if(spd>75){	// 과속
-		prevmillis = millis();
+	if(spd>OVERSPEED_LIMIT){	// 과속
+		overspeedDisplayStart = millis();
 	}
 	
-	if((millis() - prevmillis) < display_time){	//500ms동안 2번째 줄에 경고 문자열 출력
+	if((millis() - overspeedDisplayStart) < OVERSPEED_DISPLAY_TIME){	//500ms동안 2번째 줄에 경고 문자열 출력
 		LCD_setcursor(1,0);
 		LCD_wString("Too fast!!");
 	}
 	else{	//500ms 이후 2번째 줄 clear
 		LCD_setcursor(1,0);
-		LCD_wString(clearbuffer);
+		LCD_wString(LCD_CLEAR_BUFFER);
 	}
 }
 
 // light system
-void Main_Traffic_light(){	// 자동차 기준 신호등
+void Traffic_Light_Cycle(){	// 자동차 기준 신호등
 	//나중에 보행자 신호등 같이 물릴거임
-	int period = first + second + third;
-	int total = millis() / 1000 % period;
+	//모든 시간은 ms 기준
+	int totalCycleTime = carGreenTime + carYellowTime + carRedTime;
+	int currTime = millis() % totalCycleTime;
 	
 	
-	if(total > first + second)	PORTF = RED;
-	else if(total > first)	PORTF = YELLOW;
-	else	PORTF = GREEN;
+	if(currTime > carGreenTime + carYellowTime)	PORTF = RED_LED;
+	else if(currTime > carGreenTime)	PORTF = YELLOW_LED;
+	else	PORTF = GREEN_LED;
 }
 
 
@@ -241,7 +245,7 @@ int main(void)
 		USART_TX_String(buffer);
 		USART_TX_String("cm/s\r\n");
 
-		if (spd > 75) {//100cm/s의 속도를 초과하는 경우
+		if (spd > OVERSPEED_LIMIT) {//100cm/s의 속도를 초과하는 경우
 			USART_TX_String("Speed limit has reached!!!\r\n");
 		}
 		USART_TX_String("\r\n");
@@ -250,6 +254,6 @@ int main(void)
 		//
 		// millis() 에 따라 led 점멸
 		// use portF
-		Main_Traffic_light();
+		Traffic_Light_Cycle();
     }
 }
