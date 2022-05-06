@@ -78,7 +78,7 @@ void USART_TX_String(const char *text)
 
 //Sonar----------------------
 
-void Sonar_Inint()
+void Sonar_Init()
 {
     //외부 인터럽트 초기화
     // Source : INT1(PD1)
@@ -215,7 +215,7 @@ int main(void)
 	//initializing
     USART_Init(MYUBRR);
     init_millis(F_CPU);
-    Sonar_Inint();
+    Sonar_Init();
 	
     sei();//golbal interrrupt enable
 
@@ -247,7 +247,7 @@ int main(void)
 		USART_TX_String("\r\n");
 		*/
 		
-		
+		//
 		// millis() 에 따라 led 점멸
 		// use portF
 		Main_Traffic_light();
