@@ -169,7 +169,7 @@ float Sonar_Get_Speed()//return speed in cm/s
 }
 
 // LCD
-void Speed_LCD_Alart(int spd){// spd 값에 따라 속도와 과속유무 LCD에 띄움
+void Speed_LCD_Alert(int spd){// spd 값에 따라 속도와 과속유무 LCD에 띄움
 	
 	// 첫번째 줄 clear
 	LCD_setcursor(0,0);
@@ -236,8 +236,7 @@ int main(void)
 		// LCD를 통합한 코드
 		//속도를 읽어와 인쇄
 		int spd = Sonar_Get_Speed();//Sonar_Get_Tof()함수 수행시간 약 500us ~ 3ms로 측정됨
-		itoa(spd, buffer, 10);
-		Speed_LCD_Alart(spd);
+		Speed_LCD_Alert(spd);
 		
 		// USART
 		/*
