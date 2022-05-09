@@ -116,7 +116,7 @@ ISR(INT1_vect)//EXT intterpupt, rising 혹은 falling edge 검사
 		
         EICRA = 1 << ISC11; //falling edge 검사로 전환
         isHigh = true;//ISR이 수행된 뒤 파형은 H 상태임
-    } else if (ishigh) {//falling edge가 검출되고 파형이 H상태인 경우
+    } else if (isHigh) {//falling edge가 검출되고 파형이 H상태인 경우
         //불필요한 ISR수행을 막기 위해 TOVF interrupt disable
         TIMSK &= ~(1 << TOIE0); // Timer 0 overflow interrupt disable
 		isRecv = true;//tof 계산 완료
