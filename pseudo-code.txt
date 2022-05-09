@@ -1,0 +1,73 @@
+Desc: has no input nor output. Runs at the start of the main function to set the variables of the timer/interrupt used by the sonar sensor.
+Sonar_Init()	{
+	Enable and set interrupt 1 to detect rising edges
+	Set timer0 to have a 10us cycle between overflow
+}
+
+Desc: Runs every time timer0 overflows. Is used to measure time every 10us.
+ISR(TIMER0_OVR_vect)	{
+	Set timer to 10us before the timer overflows
+	Add 1 to tof
+}
+
+Desc: Has no input nor output. Runs every time the first interrupt pin detects a ledge. Is used to get the pulse length of the echo pulse.
+ISR(INT1_vect)	{
+	If ishigh is 0 then
+		Enable overflow interrupt for timer0
+		Set timer to 10us before the timer overflows
+		Reset tof to 0
+		Change INT1 to detect a falling edge
+		Set ishigh to 1
+	Else
+		Disable overflow interrupt for timer0
+		Change INT1 to detect a rising edge
+		Set ishigh to 0
+		Set isrecv to 1
+}
+
+Desc: Has no input nor output. Runs when we want to get the distance of the car. Sends a 10us pulse to the input pin of the sonar sensor and waits till an output from the echo pin is given.
+Sonar_Get_Tof()	{
+	Send a 10us pulse to the sonar’s input
+	Wait till an falling edge is detected from the echo pin
+}
+
+Desc: Has no input but outputs the speed of the car. Runs when we want to get the speed of the car. Calls Sonar_Get_Tof() twice to get the 2 distances of the car and uses the delay time between the calls to get a speed value to output. The output speed is cm/s.
+Float Sonar_Get_Speed()	{
+	Call Sonar_Get_Tof() and get the first time
+	Delay the next call by a set amount of time
+	Call Sonar_Get_Tof() and get the second time
+	If there are noises in the speed of the car then
+		Return 0 as its speed
+	Calculate the speed of the car and return it’s value
+}
+
+Desc: Has no outputs but get the car’s speed as the input. Runs when the speed calculation is complete. Shows the speed of the car in cm/s and if the car’s speed is over the speed limit print a warning sign.
+Speed_LCD_Alert(int spd)	{
+	Clear the first row of the LCD
+	Print the speed of the car in the LCD’s first line
+	If car’s speed is greater than the speed limit then
+		Display a warning message at the second line for a set amount of seconds
+		After the time clear the warning message from the second line
+}
+
+Desc: Has no input and no output. Runs every main cycle to determine the traffic light’s color. Each color has a set amount of seconds to light up.
+Main_Traffic_light()	{
+	Add all the times to get the total time for one cycle
+	Get the remainder of ms divided by the total time to get a time between 0 and the total time
+	If the remainder is greater than the red light time and the yellow light time combined then
+		Set the traffic light to green
+	Else if the remainder is greater than the red light time then
+		Set the traffic light to yellow
+	Else
+		Set the traffic light to red
+}
+
+Desc: Every main cycle the sensor detects the speed of the car and prints the speed to the LCD and changes the traffic lights depending on the time passed.
+Int main()	{
+	Initialize timer to detect ms passed from start
+	Initialize sonar settings by calling Sonar_Init() and LCD by calling LCD_Init()
+	Enable global interrupt and set the GPIO’s to output or input depending on the devices connected
+	Get the speed of the car by calling Sonar_Get_Speed
+	Print the speed to LCD by calling Speed_LCD_Alert
+	Change the traffic light by calling Main_Traffic_light
+}
