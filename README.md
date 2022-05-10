@@ -1,4 +1,4 @@
-# intelligent-traffic
+# Intelligent-Traffic - System Software Design
 
 Project Made By:
 12151228 Kim Gyeong Hyeon
