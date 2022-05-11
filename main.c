@@ -52,8 +52,14 @@ unsigned long prevmillis = 0;
 int display_time = 500;
 
 //count
-int humanCount = 0;
-int carCount = 0;
+#define MIN_GREEN_TIME 45	// 자동차 파란불 최소 시간 제한
+#define MAX_GREEN_TIME 120	// 자동차 파란불 최대 시간 제한
+double	adjustTime = 10.0 * 1000.0;	// 10 second (임시)
+int humanCount = 0;	// 사람 수
+int carCount = 0;	// 자동차 수
+int fluidGreenTimeValue = 45;	// 유동적으로 바꿀 파란불 시간 (second)
+int countPrevmillis = 0;
+int showPrevmillis = 0;
 
 //UART----------------------
 
@@ -224,16 +230,50 @@ ISR(INT3_vect){
 }
 
 
-// 사람과 자동차 count 보여주는 함수
-void Print_Falling_Edge(){
-	USART_TX_String("People count : ");
-	itoa(humanCount, buffer, 10);
-	USART_TX_String(buffer);
-	USART_TX_String("\r\n");
-	USART_TX_String("Car count : ");
-	itoa(carCount, buffer, 10);
-	USART_TX_String(buffer);
-	USART_TX_String("\r\n\r\n");
+// 사람과 자동차 count, 유동적으로 바뀐 시간을 보여주는 함수
+void Print_Overview(){
+	// 1초마다 한 번씩 출력
+	if(millis() - showPrevmillis >= 1000)
+	{
+		showPrevmillis = millis();
+		USART_TX_String("People count : ");
+		itoa(humanCount, buffer, 10);
+		USART_TX_String(buffer);
+		USART_TX_String("\r\n");
+		USART_TX_String("Car count : ");
+		itoa(carCount, buffer, 10);
+		USART_TX_String(buffer);
+		USART_TX_String("\r\n");
+		USART_TX_String("fluid time value : ");
+		itoa(fluidGreenTimeValue, buffer, 10);
+		USART_TX_String(buffer);
+		USART_TX_String("\r\n\r\n");
+	}
+}
+
+// 교통량에 따라 신호를 유동적으로 변경
+int Fluid_Traffic_Light_Adjust()
+{
+	// adjustTime 주기로 한 번씩 trigger
+	if(millis() - countPrevmillis >= adjustTime)
+	{
+		countPrevmillis = millis();
+		
+		int output;	// 리턴할 변수
+		
+		// 밑에 알고리즘 구성
+		output = fluidGreenTimeValue + carCount - humanCount;
+		
+		if(output < MIN_GREEN_TIME)	output = MIN_GREEN_TIME;
+		if(output > MAX_GREEN_TIME)	output = MAX_GREEN_TIME;
+		
+		// 변수 초기화, 바뀐 시간을 전역 변수에 저장하고 리턴
+		carCount = 0, humanCount = 0;
+		fluidGreenTimeValue = output;
+		return output;
+	}
+	else	
+		return fluidGreenTimeValue;
 }
 
 // light system
@@ -247,6 +287,8 @@ void Main_Traffic_light(){	// 자동차 기준 신호등
 	else if(total > first)	PORTF = YELLOW;
 	else	PORTF = GREEN;
 }
+
+
 
 
 int main(void)
@@ -295,6 +337,7 @@ int main(void)
 		// millis() 에 따라 led 점멸
 		// use portF
 		Main_Traffic_light();
-		Print_Falling_Edge();
+		Print_Overview();
+		Fluid_Traffic_Light_Adjust();
     }
 }
