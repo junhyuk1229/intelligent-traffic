@@ -4,7 +4,7 @@
  * Created: 2022-05-01 오후 17:04:32
  * Author : Flanon
  */
-/////
+
 //sys
 #define F_CPU 16000000UL
 #define BAUD 9600
@@ -23,7 +23,8 @@
 //pinout
 #define SONAR_TRIG_PIN PA0
 #define SONAR_ECHO_PIN INT1
-
+#define HUMAN_COUNT_PIN INT2
+#define CAR_COUNT_PIN INT3
 
 //lib
 #include <avr/io.h>
@@ -50,6 +51,9 @@ int third = 15;
 unsigned long prevmillis = 0;
 int display_time = 500;
 
+//count
+int humanCount = 0;
+int carCount = 0;
 
 //UART----------------------
 
@@ -197,6 +201,41 @@ void Speed_LCD_Alart(int spd){// spd 값에 따라 속도와 과속유무 LCD에
 	}
 }
 
+// count
+Counter_Init()
+{
+	// interrupt enable
+	EIMSK |= (1 << HUMAN_COUNT_PIN) | (1 << CAR_COUNT_PIN);
+	
+	// falling edge
+	// use INT2, INT3
+	EICRA = 1 << ISC21;
+	EICRA = 1 << ISC31;
+}
+
+// count human
+ISR(INT2_vect){
+	humanCount++;
+}
+
+// count car
+ISR(INT3_vect){
+	carCount++;
+}
+
+
+// 사람과 자동차 count 보여주는 함수
+void Print_Falling_Edge(){
+	USART_TX_String("People count : ");
+	itoa(humanCount, buffer, 10);
+	USART_TX_String(buffer);
+	USART_TX_String("\r\n");
+	USART_TX_String("Car count : ");
+	itoa(carCount, buffer, 10);
+	USART_TX_String(buffer);
+	USART_TX_String("\r\n\r\n");
+}
+
 // light system
 void Main_Traffic_light(){	// 자동차 기준 신호등
 	//나중에 보행자 신호등 같이 물릴거임
@@ -216,6 +255,7 @@ int main(void)
     USART_Init(MYUBRR);
     init_millis(F_CPU);
     Sonar_Init();
+	Counter_Init();
 	
     sei();//golbal interrrupt enable
 
@@ -223,6 +263,9 @@ int main(void)
 	DDRB = 0xFF;	// LCD data
 	DDRC = 0xFF;	// LCD control
 	DDRF = 0xFF;	// traffic light
+	
+	humanCount = 0;
+	carCount = 0;
 	
 	LCD_Init();	// use port b and c
 
@@ -234,6 +277,7 @@ int main(void)
 		int spd = Sonar_Get_Speed();//Sonar_Get_Tof()함수 수행시간 약 500us ~ 3ms로 측정됨
 		itoa(spd, buffer, 10);
 		Speed_LCD_Alart(spd);
+		
 		
 		// USART
 		/*
@@ -251,5 +295,6 @@ int main(void)
 		// millis() 에 따라 led 점멸
 		// use portF
 		Main_Traffic_light();
+		Print_Falling_Edge();
     }
 }
