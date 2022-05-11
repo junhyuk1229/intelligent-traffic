@@ -252,28 +252,22 @@ void Print_Overview(){
 }
 
 // 교통량에 따라 신호를 유동적으로 변경
-int Fluid_Traffic_Light_Adjust()
+void Fluid_Traffic_Light_Adjust()
 {
 	// adjustTime 주기로 한 번씩 trigger
 	if(millis() - countPrevmillis >= adjustTime)
 	{
 		countPrevmillis = millis();
 		
-		int output;	// 리턴할 변수
-		
 		// 밑에 알고리즘 구성
-		output = fluidGreenTimeValue + carCount - humanCount;
+		fluidGreenTimeValue = fluidGreenTimeValue + carCount - humanCount;
 		
-		if(output < MIN_GREEN_TIME)	output = MIN_GREEN_TIME;
-		if(output > MAX_GREEN_TIME)	output = MAX_GREEN_TIME;
+		if(fluidGreenTimeValue < MIN_GREEN_TIME)	fluidGreenTimeValue = MIN_GREEN_TIME;
+		if(fluidGreenTimeValue > MAX_GREEN_TIME)	fluidGreenTimeValue = MAX_GREEN_TIME;
 		
-		// 변수 초기화, 바뀐 시간을 전역 변수에 저장하고 리턴
+		// 변수 초기화
 		carCount = 0, humanCount = 0;
-		fluidGreenTimeValue = output;
-		return output;
 	}
-	else	
-		return fluidGreenTimeValue;
 }
 
 // light system
