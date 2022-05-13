@@ -52,17 +52,17 @@ unsigned long overspeedDisplayStart = 0;
 #define OVERSPEED_DISPLAY_TIME 500
 
 //count
-#define MIN_GREEN_TIME 45	// 자동차 파란불 최소 시간 제한
-#define MAX_GREEN_TIME 120	// 자동차 파란불 최대 시간 제한
+#define MIN_GREEN_TIME 45000	// 자동차 파란불 최소 시간 제한
+#define MAX_GREEN_TIME 120000	// 자동차 파란불 최대 시간 제한
 double	adjustTime = 10.0 * 1000.0;	// 10 second (임시)
 int humanCount = 0;	// 사람 수
 int carCount = 0;	// 자동차 수
 int hours = 0;		// 시간
-int fluidGreenTimeValue = 45;	// 유동적으로 바꿀 파란불 시간 (second)
+int fluidGreenTimeValue = 45000;	// 유동적으로 바꿀 파란불 시간 (ms)
 int countPrevmillis = 0;
 int showPrevmillis = 0;
 
-short prevDayTime[24];		// 다음에 사용될 시간이 저장되어있는 array
+int prevDayTime[24];		// 다음에 사용될 시간이 저장되어있는 array
 
 bool carWarningFlag = false;	// 차량 경고 플래그
 unsigned long carPrevmillis = 0;	// 차량 경고용
