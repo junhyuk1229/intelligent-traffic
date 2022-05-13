@@ -288,10 +288,10 @@ void Fluid_Traffic_Light_Adjust()
 void Traffic_Light_Cycle(){	// 자동차 기준 신호등
 	//나중에 보행자 신호등 같이 물릴거임
 	//모든 시간은 ms 기준
-	int totalCycleTime = fluidGreenTimeValue + carYellowTime + carRedTime;
+	int totalCycleTime = fluidGreenTimeValue + CAR_YELLOW_TIME + carRedTime;
 	int currTime = millis() % totalCycleTime;
 	
-	if(currTime > fluidGreenTimeValue + carYellowTime)	{
+	if(currTime > fluidGreenTimeValue + CAR_YELLOW_TIME)	{
 		PORTF |= RED_LED;
 		PORTF &= ~(YELLOW_LED | GREEN_LED);
 	}
