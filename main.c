@@ -61,7 +61,9 @@ int carCount = 0;	// 자동차 수
 int fluidGreenTimeValue = 45;	// 유동적으로 바꿀 파란불 시간 (second)
 int countPrevmillis = 0;
 int showPrevmillis = 0;
-bool carWarningFlag = false;
+bool carWarningFlag = false;	// 차량 경고 플래그
+unsigned long carPrevmillis = 0;	// 차량 경고용
+unsigned long humanPrevmillis = 0;	// 보행자 경고용
 
 //LCD
 #define OVERSPEED_LIMIT 75
@@ -225,10 +227,10 @@ Counter_Init()
 }
 
 // count human
-ISR(ANALOG_COMP_vect){
+ISR(INT3_vect){
 	if(carWarningFlag)
 	{
-		/* 차량 경고*/
+		carPrevmillis = millis();	// 차량 경고
 	}
 	carCount++;
 }
@@ -237,7 +239,7 @@ ISR(ANALOG_COMP_vect){
 ISR(INT2_vect){
 	if(!carWarningFlag)
 	{
-		/* 보행자 경고 */
+		humanPrevmillis = millis();	// 보행자 경고
 	}
 	humanCount++;
 }
@@ -320,6 +322,7 @@ int main(void)
 	DDRA |= 1 << SONAR_TRIG_PIN;
 	DDRB = 0xFF;	// LCD data
 	DDRC = 0xFF;	// LCD control
+	DDRE = 0xff;
 	DDRF = 0xFF;	// traffic light
 	
 	humanCount = 0;
@@ -353,5 +356,21 @@ int main(void)
 		Traffic_Light_Cycle();
 		Print_Overview();
 		Fluid_Traffic_Light_Adjust();
+		
+		unsigned long carTimeTerm = millis()-carPrevmillis;
+		unsigned long humanTimeTerm = millis()-carPrevmillis;
+		
+		if(millis() > 3000 && carTimeTerm > 0 && carTimeTerm < 3000)
+		{
+			// 차량 경고
+			PORTE = 0x80;
+		}
+		if(millis() > 3000 && humanTimeTerm > 0 && humanTimeTerm < 3000)
+		{
+			// 보행자 경고
+			PORTE = 0x40;
+		}
+		
+		
     }
 }
