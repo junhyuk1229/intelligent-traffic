@@ -360,16 +360,21 @@ int main(void)
 		unsigned long carTimeTerm = millis()-carPrevmillis;
 		unsigned long humanTimeTerm = millis()-carPrevmillis;
 		
+		// 시작 3초 이후 신호 위반 감지했다면 3초동안 차량 경고
 		if(millis() > 3000 && carTimeTerm > 0 && carTimeTerm < 3000)
 		{
 			// 차량 경고
 			PORTE = 0x80;
 		}
+		else PORTE = 0x00;
+		
+		// 시작 3초 이후 신호 위반 감지했다면 3초동안 보행자 경고
 		if(millis() > 3000 && humanTimeTerm > 0 && humanTimeTerm < 3000)
 		{
 			// 보행자 경고
 			PORTE = 0x40;
 		}
+		else PORTE = 0x00;
 		
 		
     }
