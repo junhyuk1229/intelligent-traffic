@@ -46,8 +46,7 @@ char buffer[10];
 #define LCD_CLEAR_BUFFER "                "
 
 //light
-int carGreenTime = 45000;
-int carYellowTime = 5000;
+#define CAR_YELLOW_TIME 5000;
 int carRedTime = 15000;
 unsigned long overspeedDisplayStart = 0;
 #define OVERSPEED_DISPLAY_TIME 500
@@ -58,12 +57,17 @@ unsigned long overspeedDisplayStart = 0;
 double	adjustTime = 10.0 * 1000.0;	// 10 second (임시)
 int humanCount = 0;	// 사람 수
 int carCount = 0;	// 자동차 수
+int hours = 0;		// 시간
 int fluidGreenTimeValue = 45;	// 유동적으로 바꿀 파란불 시간 (second)
 int countPrevmillis = 0;
 int showPrevmillis = 0;
+
+short prevDayTime[24];		// 다음에 사용될 시간이 저장되어있는 array
+
 bool carWarningFlag = false;	// 차량 경고 플래그
 unsigned long carPrevmillis = 0;	// 차량 경고용
 unsigned long humanPrevmillis = 0;	// 보행자 경고용
+
 
 //LCD
 #define OVERSPEED_LIMIT 75
@@ -244,6 +248,10 @@ Counter_Init()
 	// use INT2, INT3
 	EICRA = 1 << ISC21;
 	EICRA = 1 << ISC31;
+	
+	for(int i = 0; i < 24; i++)	{
+		prevDayTime[i] = MIN_GREEN_TIME;
+	}
 }
 
 // count human
@@ -302,6 +310,11 @@ void Fluid_Traffic_Light_Adjust()
 		
 		// 변수 초기화
 		carCount = 0, humanCount = 0;
+		
+		// 결과 시간 저장 + 다음 시간 불러오기
+		prevDayTime[hour] = fluidGreenTimeValue;
+		hour = (hour + 1) % 24;
+		fluidGreenTimeValue = prevDayTime[hour];
 	}
 }
 
@@ -309,21 +322,23 @@ void Fluid_Traffic_Light_Adjust()
 void Traffic_Light_Cycle(){	// 자동차 기준 신호등
 	//나중에 보행자 신호등 같이 물릴거임
 	//모든 시간은 ms 기준
-	int totalCycleTime = carGreenTime + carYellowTime + carRedTime;
+	int totalCycleTime = fluidGreenTimeValue + CAR_YELLOW_TIME + carRedTime;
 	int currTime = millis() % totalCycleTime;
 	
-	
-	if(currTime > carGreenTime + carYellowTime)	
-	{
-		PORTF = RED_LED;
-		carWarningFlag = true;
+	if(currTime > fluidGreenTimeValue + CAR_YELLOW_TIME)	{
+		PORTF |= RED_LED;
+		PORTF &= ~(YELLOW_LED | GREEN_LED);
+    carWarningFlag = true;
 	}
-	else if(currTime > carGreenTime)	PORTF = YELLOW_LED;
-	else	
-	{
-		PORTF = GREEN_LED;
-		carWarningFlag = false;
+	else if(currTime > fluidGreenTimeValue)	{
+		PORTF |= YELLOW_LED;
+		PORTF &= ~(GREEN_LED | RED_LED);
 	}
+	else	{
+		PORTF |= GREEN_LED;
+		PORTF &= ~(RED_LED | YELLOW_LED);
+    carWarningFlag = false;
+  }
 }
 
 
@@ -373,6 +388,7 @@ int main(void)
 		//
 		// millis() 에 따라 led 점멸
 		// use portF
+    
 		Traffic_Light_Cycle();
 		Print_Overview();
 		Fluid_Traffic_Light_Adjust();
