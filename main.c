@@ -46,8 +46,7 @@ char buffer[10];
 #define LCD_CLEAR_BUFFER "                "
 
 //light
-int carGreenTime = 45000;
-int carYellowTime = 5000;
+#define CAR_YELLOW_TIME 5000;
 int carRedTime = 15000;
 unsigned long overspeedDisplayStart = 0;
 #define OVERSPEED_DISPLAY_TIME 500
