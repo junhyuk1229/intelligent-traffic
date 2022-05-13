@@ -23,7 +23,8 @@
 //pinout
 #define SONAR_TRIG_PIN PA0
 #define SONAR_ECHO_PIN INT1
-
+#define HUMAN_COUNT_PIN INT2
+#define CAR_COUNT_PIN INT3
 
 //lib
 #include <avr/io.h>
@@ -50,6 +51,16 @@ int carYellowTime = 5000;
 int carRedTime = 15000;
 unsigned long overspeedDisplayStart = 0;
 #define OVERSPEED_DISPLAY_TIME 500
+
+//count
+#define MIN_GREEN_TIME 45	// 자동차 파란불 최소 시간 제한
+#define MAX_GREEN_TIME 120	// 자동차 파란불 최대 시간 제한
+double	adjustTime = 10.0 * 1000.0;	// 10 second (임시)
+int humanCount = 0;	// 사람 수
+int carCount = 0;	// 자동차 수
+int fluidGreenTimeValue = 45;	// 유동적으로 바꿀 파란불 시간 (second)
+int countPrevmillis = 0;
+int showPrevmillis = 0;
 
 //LCD
 #define OVERSPEED_LIMIT 75
@@ -200,6 +211,69 @@ void Speed_LCD_Alert(int spd){// spd 값에 따라 속도와 과속유무 LCD에
 	}
 }
 
+// count
+Counter_Init()
+{
+	// interrupt enable
+	EIMSK |= (1 << HUMAN_COUNT_PIN) | (1 << CAR_COUNT_PIN);
+	
+	// falling edge
+	// use INT2, INT3
+	EICRA = 1 << ISC21;
+	EICRA = 1 << ISC31;
+}
+
+// count human
+ISR(INT2_vect){
+	humanCount++;
+}
+
+// count car
+ISR(INT3_vect){
+	carCount++;
+}
+
+
+// 사람과 자동차 count, 유동적으로 바뀐 시간을 보여주는 함수
+void Print_Overview(){
+	// 1초마다 한 번씩 출력
+	if(millis() - showPrevmillis >= 1000)
+	{
+		showPrevmillis = millis();
+		USART_TX_String("People count : ");
+		itoa(humanCount, buffer, 10);
+		USART_TX_String(buffer);
+		USART_TX_String("\r\n");
+		USART_TX_String("Car count : ");
+		itoa(carCount, buffer, 10);
+		USART_TX_String(buffer);
+		USART_TX_String("\r\n");
+		USART_TX_String("fluid time value : ");
+		itoa(fluidGreenTimeValue, buffer, 10);
+		USART_TX_String(buffer);
+		USART_TX_String("\r\n\r\n");
+	}
+}
+
+// 교통량에 따라 신호를 유동적으로 변경
+void Fluid_Traffic_Light_Adjust()
+{
+	// adjustTime 주기로 한 번씩 trigger
+	if(millis() - countPrevmillis >= adjustTime)
+	{
+		countPrevmillis = millis();
+		
+		// 밑에 알고리즘 구성
+		fluidGreenTimeValue = fluidGreenTimeValue + carCount - humanCount;
+		
+		if(fluidGreenTimeValue < MIN_GREEN_TIME)	fluidGreenTimeValue = MIN_GREEN_TIME;
+		if(fluidGreenTimeValue > MAX_GREEN_TIME)	fluidGreenTimeValue = MAX_GREEN_TIME;
+		
+		// 변수 초기화
+		carCount = 0, humanCount = 0;
+	}
+}
+
 // light system
 void Traffic_Light_Cycle(){	// 자동차 기준 신호등
 	//나중에 보행자 신호등 같이 물릴거임
@@ -214,12 +288,15 @@ void Traffic_Light_Cycle(){	// 자동차 기준 신호등
 }
 
 
+
+
 int main(void)
 {
 	//initializing
-	USART_Init(MYUBRR);
-	init_millis(F_CPU);
-	Sonar_Init();
+    USART_Init(MYUBRR);
+    init_millis(F_CPU);
+    Sonar_Init();
+    Counter_Init();
 	
 	sei();//golbal interrrupt enable
 
@@ -227,6 +304,9 @@ int main(void)
 	DDRB = 0xFF;	// LCD data
 	DDRC = 0xFF;	// LCD control
 	DDRF = 0xFF;	// traffic light
+	
+	humanCount = 0;
+	carCount = 0;
 	
 	LCD_Init();	// use port b and c
 
@@ -237,6 +317,7 @@ int main(void)
 		//속도를 읽어와 인쇄
 		int spd = Sonar_Get_Speed();//Sonar_Get_Tof()함수 수행시간 약 500us ~ 3ms로 측정됨
 		Speed_LCD_Alert(spd);
+		
 		
 		// USART
 		/*
@@ -253,6 +334,8 @@ int main(void)
 		//
 		// millis() 에 따라 led 점멸
 		// use portF
-		Traffic_Light_Cycle();
-	}
+    Traffic_Light_Cycle();
+		Print_Overview();
+		Fluid_Traffic_Light_Adjust();
+    }
 }
