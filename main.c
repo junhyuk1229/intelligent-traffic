@@ -61,7 +61,13 @@ int hours = 0;		// 시간
 int fluidGreenTimeValue = 45;	// 유동적으로 바꿀 파란불 시간 (second)
 int countPrevmillis = 0;
 int showPrevmillis = 0;
+
 short prevDayTime[24];		// 다음에 사용될 시간이 저장되어있는 array
+
+bool carWarningFlag = false;	// 차량 경고 플래그
+unsigned long carPrevmillis = 0;	// 차량 경고용
+unsigned long humanPrevmillis = 0;	// 보행자 경고용
+
 
 //LCD
 #define OVERSPEED_LIMIT 75
@@ -180,6 +186,26 @@ float Sonar_Get_Speed()//return speed in cm/s
 	//((음속 / 음파 이동 횟수 / 단위보정(1m->100cm, 10us) * 시간차) / (샘플링 간격 / 단위보정(1s->1ms))
 }
 
+//Analog comparator----------------------
+ISR(ANALOG_COMP_vect){
+	PORTF = 0xFF;
+	_delay_ms (500);
+}
+
+void Interrupt_Init(){
+	//comp
+	//SFIOR |= 1 << ACME;
+	ACSR = (1 << ACIE) | (1 << ACIS1) | (1 << ACIS0);
+	
+	//Ext int
+	
+}
+
+//Ext Interrupt----------------------
+ISR(INT2_vect){
+	
+}
+
 // LCD
 void Speed_LCD_Alert(int spd){// spd 값에 따라 속도와 과속유무 LCD에 띄움
 	
@@ -229,13 +255,21 @@ Counter_Init()
 }
 
 // count human
-ISR(INT2_vect){
-	humanCount++;
+ISR(INT3_vect){
+	if(carWarningFlag)
+	{
+		carPrevmillis = millis();	// 차량 경고
+	}
+	carCount++;
 }
 
 // count car
-ISR(INT3_vect){
-	carCount++;
+ISR(INT2_vect){
+	if(!carWarningFlag)
+	{
+		humanPrevmillis = millis();	// 보행자 경고
+	}
+	humanCount++;
 }
 
 
@@ -294,6 +328,7 @@ void Traffic_Light_Cycle(){	// 자동차 기준 신호등
 	if(currTime > fluidGreenTimeValue + CAR_YELLOW_TIME)	{
 		PORTF |= RED_LED;
 		PORTF &= ~(YELLOW_LED | GREEN_LED);
+    carWarningFlag = true;
 	}
 	else if(currTime > fluidGreenTimeValue)	{
 		PORTF |= YELLOW_LED;
@@ -302,7 +337,8 @@ void Traffic_Light_Cycle(){	// 자동차 기준 신호등
 	else	{
 		PORTF |= GREEN_LED;
 		PORTF &= ~(RED_LED | YELLOW_LED);
-	}
+    carWarningFlag = false;
+  }
 }
 
 
@@ -321,6 +357,7 @@ int main(void)
 	DDRA |= 1 << SONAR_TRIG_PIN;
 	DDRB = 0xFF;	// LCD data
 	DDRC = 0xFF;	// LCD control
+	DDRE = 0xff;
 	DDRF = 0xFF;	// traffic light
 	
 	humanCount = 0;
@@ -342,7 +379,6 @@ int main(void)
 		USART_TX_String("Speed:");
 		USART_TX_String(buffer);
 		USART_TX_String("cm/s\r\n");
-
 		if (spd > OVERSPEED_LIMIT) {//100cm/s의 속도를 초과하는 경우
 			USART_TX_String("Speed limit has reached!!!\r\n");
 		}
@@ -352,8 +388,30 @@ int main(void)
 		//
 		// millis() 에 따라 led 점멸
 		// use portF
-    		Traffic_Light_Cycle();
+    
+		Traffic_Light_Cycle();
 		Print_Overview();
 		Fluid_Traffic_Light_Adjust();
-    	}
+		
+		unsigned long carTimeTerm = millis()-carPrevmillis;
+		unsigned long humanTimeTerm = millis()-carPrevmillis;
+		
+		// 시작 3초 이후 신호 위반 감지했다면 3초동안 차량 경고
+		if(millis() > 3000 && carTimeTerm > 0 && carTimeTerm < 3000)
+		{
+			// 차량 경고
+			PORTE = 0x80;
+		}
+		else PORTE = 0x00;
+		
+		// 시작 3초 이후 신호 위반 감지했다면 3초동안 보행자 경고
+		if(millis() > 3000 && humanTimeTerm > 0 && humanTimeTerm < 3000)
+		{
+			// 보행자 경고
+			PORTE = 0x40;
+		}
+		else PORTE = 0x00;
+		
+		
+    }
 }
