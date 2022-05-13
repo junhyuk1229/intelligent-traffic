@@ -179,6 +179,26 @@ float Sonar_Get_Speed()//return speed in cm/s
 	//((음속 / 음파 이동 횟수 / 단위보정(1m->100cm, 10us) * 시간차) / (샘플링 간격 / 단위보정(1s->1ms))
 }
 
+//Analog comparator----------------------
+ISR(ANALOG_COMP_vect){
+	PORTF = 0xFF;
+	_delay_ms (500);
+}
+
+void Interrupt_Init(){
+	//comp
+	//SFIOR |= 1 << ACME;
+	ACSR = (1 << ACIE) | (1 << ACIS1) | (1 << ACIS0);
+	
+	//Ext int
+	
+}
+
+//Ext Interrupt----------------------
+ISR(INT2_vect){
+	
+}
+
 // LCD
 void Speed_LCD_Alert(int spd){// spd 값에 따라 속도와 과속유무 LCD에 띄움
 	
