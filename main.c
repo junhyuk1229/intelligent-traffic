@@ -103,9 +103,9 @@ void Sonar_Init()
 {
 	//외부 인터럽트 초기화
 	// Source : INT1(PD1)
-	EICRA = (1 << ISC11) | (1 << ISC10);//초기상태에서는 rising edge 검사가 이루어져야 함
-	EIMSK = 1 << SONAR_ECHO_PIN;//INT1 EXT interrupt enable
-	EIFR = 1 << SONAR_ECHO_PIN;//강제로 INTF1 EXT interrupt flag set
+	EICRA |= (1 << ISC11) | (1 << ISC10);//초기상태에서는 rising edge 검사가 이루어져야 함
+	EIMSK |= 1 << SONAR_ECHO_PIN;//INT1 EXT interrupt enable
+	EIFR |= 1 << SONAR_ECHO_PIN;//강제로 INTF1 EXT interrupt flag set
 
 	//timer0 초기화(10us단위로 tovf 인터럽트 형성 필요)
 	//interrupt cycle: 20/(F_CPU/prescaler) = 0.00001s -> 10us
@@ -132,14 +132,14 @@ ISR(INT1_vect)//EXT intterpupt, rising 혹은 falling edge 검사
 		TCNT0 = 0xFF - 20;//타이머 초기화
 		tof = 0;//tof 초기화
 		
-		EICRA = 1 << ISC11; //falling edge 검사로 전환
+		EICRA &= ~(1 << ISC10); //falling edge 검사로 전환
 		isHigh = true;//ISR이 수행된 뒤 파형은 H 상태임
 	} else if (isHigh) {//falling edge가 검출되고 파형이 H상태인 경우
 		//불필요한 ISR수행을 막기 위해 TOVF interrupt disable
 		TIMSK &= ~(1 << TOIE0); // Timer 0 overflow interrupt disable
 		isRecv = true;//tof 계산 완료
 
-		EICRA = (1 << ISC11) | (1 << ISC10);//rising edge 검사로 전환
+		EICRA |= 1 << ISC10;//rising edge 검사로 전환
 		isHigh = false;//ISR이 수행된 뒤 파형은 L 상태임
 	}
 	//sei();//set golbal interrrupt flag
@@ -195,7 +195,7 @@ ISR(ANALOG_COMP_vect){
 void Interrupt_Init(){
 	//comp
 	//SFIOR |= 1 << ACME;
-	ACSR = (1 << ACIE) | (1 << ACIS1) | (1 << ACIS0);
+	ACSR |= (1 << ACIE) | (1 << ACIS1) | (1 << ACIS0);
 	
 	//Ext int
 	
@@ -246,8 +246,8 @@ Counter_Init()
 	
 	// falling edge
 	// use INT2, INT3
-	EICRA = 1 << ISC21;
-	EICRA = 1 << ISC31;
+	EICRA |= 1 << ISC21;
+	EICRA |= 1 << ISC31;
 	
 	for(int i = 0; i < 24; i++)	{
 		prevDayTime[i] = MIN_GREEN_TIME;
