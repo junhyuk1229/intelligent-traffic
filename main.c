@@ -58,9 +58,11 @@ unsigned long overspeedDisplayStart = 0;
 double	adjustTime = 10.0 * 1000.0;	// 10 second (임시)
 int humanCount = 0;	// 사람 수
 int carCount = 0;	// 자동차 수
+int hours = 0;		// 시간
 int fluidGreenTimeValue = 45;	// 유동적으로 바꿀 파란불 시간 (second)
 int countPrevmillis = 0;
 int showPrevmillis = 0;
+short prevDayTime[24];		// 다음에 사용될 시간이 저장되어있는 array
 
 //LCD
 #define OVERSPEED_LIMIT 75
@@ -221,6 +223,10 @@ Counter_Init()
 	// use INT2, INT3
 	EICRA = 1 << ISC21;
 	EICRA = 1 << ISC31;
+	
+	for(int i = 0; i < 24; i++)	{
+		prevDayTime[i] = MIN_GREEN_TIME;
+	}
 }
 
 // count human
@@ -271,6 +277,11 @@ void Fluid_Traffic_Light_Adjust()
 		
 		// 변수 초기화
 		carCount = 0, humanCount = 0;
+		
+		// 결과 시간 저장 + 다음 시간 불러오기
+		prevDayTime[hour] = fluidGreenTimeValue;
+		hour = (hour + 1) % 24;
+		fluidGreenTimeValue = prevDayTime[hour];
 	}
 }
 
@@ -281,10 +292,18 @@ void Traffic_Light_Cycle(){	// 자동차 기준 신호등
 	int totalCycleTime = carGreenTime + carYellowTime + carRedTime;
 	int currTime = millis() % totalCycleTime;
 	
-	
-	if(currTime > carGreenTime + carYellowTime)	PORTF = RED_LED;
-	else if(currTime > carGreenTime)	PORTF = YELLOW_LED;
-	else	PORTF = GREEN_LED;
+	if(currTime > carGreenTime + carYellowTime)	{
+		PORTF |= RED_LED;
+		PORTF &= ~(YELLOW_LED | GREEN_LED);
+	}
+	else if(currTime > carGreenTime)	{
+		PORTF |= YELLOW_LED;
+		PORTF &= ~(GREEN_LED | RED_LED);
+	}
+	else	{
+		PORTF |= GREEN_LED;
+		PORTF &= ~(RED_LED | YELLOW_LED);
+	}
 }
 
 
