@@ -61,6 +61,9 @@ int carCount = 0;	// 자동차 수
 int fluidGreenTimeValue = 45;	// 유동적으로 바꿀 파란불 시간 (second)
 int countPrevmillis = 0;
 int showPrevmillis = 0;
+bool carWarningFlag = false;	// 차량 경고 플래그
+unsigned long carPrevmillis = 0;	// 차량 경고용
+unsigned long humanPrevmillis = 0;	// 보행자 경고용
 
 //LCD
 #define OVERSPEED_LIMIT 75
@@ -244,13 +247,21 @@ Counter_Init()
 }
 
 // count human
-ISR(INT2_vect){
-	humanCount++;
+ISR(INT3_vect){
+	if(carWarningFlag)
+	{
+		carPrevmillis = millis();	// 차량 경고
+	}
+	carCount++;
 }
 
 // count car
-ISR(INT3_vect){
-	carCount++;
+ISR(INT2_vect){
+	if(!carWarningFlag)
+	{
+		humanPrevmillis = millis();	// 보행자 경고
+	}
+	humanCount++;
 }
 
 
@@ -302,9 +313,17 @@ void Traffic_Light_Cycle(){	// 자동차 기준 신호등
 	int currTime = millis() % totalCycleTime;
 	
 	
-	if(currTime > carGreenTime + carYellowTime)	PORTF = RED_LED;
+	if(currTime > carGreenTime + carYellowTime)	
+	{
+		PORTF = RED_LED;
+		carWarningFlag = true;
+	}
 	else if(currTime > carGreenTime)	PORTF = YELLOW_LED;
-	else	PORTF = GREEN_LED;
+	else	
+	{
+		PORTF = GREEN_LED;
+		carWarningFlag = false;
+	}
 }
 
 
@@ -323,6 +342,7 @@ int main(void)
 	DDRA |= 1 << SONAR_TRIG_PIN;
 	DDRB = 0xFF;	// LCD data
 	DDRC = 0xFF;	// LCD control
+	DDRE = 0xff;
 	DDRF = 0xFF;	// traffic light
 	
 	humanCount = 0;
@@ -344,7 +364,6 @@ int main(void)
 		USART_TX_String("Speed:");
 		USART_TX_String(buffer);
 		USART_TX_String("cm/s\r\n");
-
 		if (spd > OVERSPEED_LIMIT) {//100cm/s의 속도를 초과하는 경우
 			USART_TX_String("Speed limit has reached!!!\r\n");
 		}
@@ -354,8 +373,29 @@ int main(void)
 		//
 		// millis() 에 따라 led 점멸
 		// use portF
-    Traffic_Light_Cycle();
+		Traffic_Light_Cycle();
 		Print_Overview();
 		Fluid_Traffic_Light_Adjust();
+		
+		unsigned long carTimeTerm = millis()-carPrevmillis;
+		unsigned long humanTimeTerm = millis()-carPrevmillis;
+		
+		// 시작 3초 이후 신호 위반 감지했다면 3초동안 차량 경고
+		if(millis() > 3000 && carTimeTerm > 0 && carTimeTerm < 3000)
+		{
+			// 차량 경고
+			PORTE = 0x80;
+		}
+		else PORTE = 0x00;
+		
+		// 시작 3초 이후 신호 위반 감지했다면 3초동안 보행자 경고
+		if(millis() > 3000 && humanTimeTerm > 0 && humanTimeTerm < 3000)
+		{
+			// 보행자 경고
+			PORTE = 0x40;
+		}
+		else PORTE = 0x00;
+		
+		
     }
 }
