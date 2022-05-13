@@ -46,7 +46,7 @@ char buffer[10];
 #define LCD_CLEAR_BUFFER "                "
 
 //light
-int carGreenTime = 45000;
+int carGreenTime = 15000;
 int carYellowTime = 5000;
 int carRedTime = 15000;
 unsigned long overspeedDisplayStart = 0;
@@ -180,26 +180,6 @@ float Sonar_Get_Speed()//return speed in cm/s
 
 	return ((SPEED_OF_SOUND / 2.0 / 1000.0) * (t1 - t2)) / (SAMPLING_INTERVAL / 1000.0);
 	//((음속 / 음파 이동 횟수 / 단위보정(1m->100cm, 10us) * 시간차) / (샘플링 간격 / 단위보정(1s->1ms))
-}
-
-//Analog comparator----------------------
-ISR(ANALOG_COMP_vect){
-	PORTF = 0xFF;
-	_delay_ms (500);
-}
-
-void Interrupt_Init(){
-	//comp
-	//SFIOR |= 1 << ACME;
-	ACSR = (1 << ACIE) | (1 << ACIS1) | (1 << ACIS0);
-	
-	//Ext int
-	
-}
-
-//Ext Interrupt----------------------
-ISR(INT2_vect){
-	
 }
 
 // LCD
@@ -355,8 +335,8 @@ int main(void)
 		
 		// LCD를 통합한 코드
 		//속도를 읽어와 인쇄
-		int spd = Sonar_Get_Speed();//Sonar_Get_Tof()함수 수행시간 약 500us ~ 3ms로 측정됨
-		Speed_LCD_Alert(spd);
+		//int spd = Sonar_Get_Speed();//Sonar_Get_Tof()함수 수행시간 약 500us ~ 3ms로 측정됨
+		//Speed_LCD_Alert(spd);
 		
 		
 		// USART
@@ -378,23 +358,30 @@ int main(void)
 		Fluid_Traffic_Light_Adjust();
 		
 		unsigned long carTimeTerm = millis()-carPrevmillis;
-		unsigned long humanTimeTerm = millis()-carPrevmillis;
+		unsigned long humanTimeTerm = millis()-humanPrevmillis;
 		
 		// 시작 3초 이후 신호 위반 감지했다면 3초동안 차량 경고
 		if(millis() > 3000 && carTimeTerm > 0 && carTimeTerm < 3000)
 		{
 			// 차량 경고
-			PORTE = 0x80;
+			if(millis()%2)
+			PORTE |= 1 << PE2;
+			else
+			PORTE &= ~1 << PE2;
 		}
-		else PORTE = 0x00;
+		//else PORTE = 0x00;
 		
 		// 시작 3초 이후 신호 위반 감지했다면 3초동안 보행자 경고
 		if(millis() > 3000 && humanTimeTerm > 0 && humanTimeTerm < 3000)
 		{
 			// 보행자 경고
-			PORTE = 0x40;
+			if(millis()%2)
+			PORTE |= 1 << PE3;
+			else
+			PORTE &= ~1 << PE3;
+			
 		}
-		else PORTE = 0x00;
+		//else PORTE = 0x00;
 		
 		
     }
