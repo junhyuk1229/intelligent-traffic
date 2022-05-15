@@ -19,7 +19,6 @@
 #define SONAR_TRIG_PIN PA0
 #define SONAR_ECHO_PIN INT1
 #define HUMAN_COUNT_PIN INT2
-#define VEHICLE_COUNT_PIN INT3
 
 #define VEHICLE_RED_LED PF0
 #define VEHICLE_YELLOW_LED PF1
@@ -29,6 +28,7 @@
 #define PEDESTRIAN_GREEN_LED PF4
 
 #define BUZZER_PIN PF5
+#define WARNING_LED PF6
 
 //lib
 #include <avr/io.h>
@@ -75,6 +75,9 @@ char buffer[10];
 #define LCD_CLEAR_BUFFER "                "
 unsigned long showPrevmillis = 0;
 
+#define DEBOUNCE_TIME 30
+unsigned long prevTrgtime = 0;
+
 //UART----------------------
 
 //initialize USART ubrr, rx, tx, character size
@@ -104,6 +107,9 @@ void USART_TX_String(const char *text)
 
 void Sonar_Init()
 {
+    //port 설정
+    DDRA |= 1 << SONAR_TRIG_PIN;
+
     //외부 인터럽트 초기화
     // Source : INT1(PD1)
     EICRA |= (1 << ISC11) | (1 << ISC10);//초기상태에서는 rising edge 검사가 이루어져야 함
@@ -169,6 +175,7 @@ float Sonar_Get_Speed()//return speed in cm/s
     Sonar_Get_Tof ();
     int t2 = tof;
 
+    /*
     USART_TX_String("D1:");
     itoa((int)(t1 * 0.17), buffer, 10);
     USART_TX_String(buffer);
@@ -178,6 +185,7 @@ float Sonar_Get_Speed()//return speed in cm/s
     itoa((int)(t2 * 0.17), buffer, 10);
     USART_TX_String(buffer);
     USART_TX_String("cm\r\n");
+    */
 
     //예외처리 Timeout
     if (t1 > 3800 || t2 > 3800)	return 0;
@@ -194,10 +202,17 @@ float Sonar_Get_Speed()//return speed in cm/s
 void Interrupt_Init()
 {
     //comp
+    SFIOR &= ~(1 << ACME);//analog comp multiplexer disable
+    //ADCSRA &= ~(1 << ADEN);//disable ADC
+    ACSR = (1 << ACIS1) | (1 << ACIS0);//Comparator Interrupt on Rising Output Edge
+    ACSR |= (1 << ACIE);// Analog Comparator Interrupt Enable
+
     /*
-    SFIOR &= ~(1 << ACME);
-    //ADCSRA |= 1 << ADEN;
-    ACSR = (1 << ACIE);// | (1 << ACIS1) | (1 << ACIS0);
+    //Ext int
+    EIMSK |= (1 << VEHICLE_COUNT_PIN);
+    // falling edge
+    // use INT3
+    EICRA |= (1 << ISC31);
     */
 
     //Ext int
@@ -206,37 +221,31 @@ void Interrupt_Init()
     // use INT2
     EICRA |= (1 << ISC21);
 
-    //Ext int
-    EIMSK |= (1 << VEHICLE_COUNT_PIN);
-    // falling edge
-    // use INT3
-    EICRA |= (1 << ISC31);
-
     for (int i = 0; i < 24; i++)	{
         prevDayTime[i] = MIN_GREEN_TIME;
     }
 }
 
-ISR(INT3_vect)
+//comp
+ISR(ANALOG_COMP_vect)
 {
-    if (carWarningFlag) {
+    if (carWarningFlag)
         carPrevmillis = millis();	// 차량 경고
-        //PORTF = 0xFF;
-        //_delay_ms (500);
-        //PORTF = 0x00;
+    if (millis() - prevTrgtime > DEBOUNCE_TIME) {
+        prevTrgtime = millis();
+        carCount++;
     }
-    carCount++;
 }
 
+//ext
 ISR(INT2_vect)
 {
-    if (!carWarningFlag) {
+    if (!carWarningFlag)
         humanPrevmillis = millis();	// 보행자 경고
-        //PORTF = 0xFF;
-        //_delay_ms (500);
-        //PORTF = 0x00;
+    if (millis() - prevTrgtime > DEBOUNCE_TIME) {
+        prevTrgtime = millis();
+        humanCount++;
     }
-    humanCount++;
 }
 
 //Fluid_Traffic----------------------
@@ -306,17 +315,23 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
     int totalCycleTime = fluidGreenTimeValue + CAR_YELLOW_TIME + carRedTime;
     int currTime = millis() % totalCycleTime;
 
-    if (currTime > fluidGreenTimeValue + CAR_YELLOW_TIME)	{
+    if (currTime > fluidGreenTimeValue + CAR_YELLOW_TIME)	{//차량 적색
         PORTF |= 1 << VEHICLE_RED_LED;
         PORTF &= ~(1 << VEHICLE_YELLOW_LED | 1 << VEHICLE_GREEN_LED);
         carWarningFlag = true;
-    } else if (currTime > fluidGreenTimeValue)	{
+        //보행자 청색
+        PORTF |= 1 << PEDESTRIAN_GREEN_LED;
+        PORTF &= ~(1 << PEDESTRIAN_RED_LED);
+    } else if (currTime > fluidGreenTimeValue)	{//차량 황색
         PORTF |= 1 << VEHICLE_YELLOW_LED;
         PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
-    } else	{
+    } else	{//차량 청색
         PORTF |= 1 << VEHICLE_GREEN_LED;
         PORTF &= ~(1 << VEHICLE_RED_LED | 1 << VEHICLE_YELLOW_LED);
         carWarningFlag = false;
+        //보행자 적색
+        PORTF |= 1 << PEDESTRIAN_RED_LED;
+        PORTF &= ~(1 << PEDESTRIAN_GREEN_LED);
     }
 }
 
@@ -325,22 +340,22 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
 // 사람과 자동차 count, 유동적으로 바뀐 시간을 보여주는 함수
 void Print_Overview()
 {
-	// 1초마다 한 번씩 출력
-	if (millis() - showPrevmillis >= 1000) {
-		showPrevmillis = millis();
-		USART_TX_String("People count : ");
-		itoa(humanCount, buffer, 10);
-		USART_TX_String(buffer);
-		USART_TX_String("\r\n");
-		USART_TX_String("Car count : ");
-		itoa(carCount, buffer, 10);
-		USART_TX_String(buffer);
-		USART_TX_String("\r\n");
-		USART_TX_String("fluid time value : ");
-		itoa(fluidGreenTimeValue, buffer, 10);
-		USART_TX_String(buffer);
-		USART_TX_String("\r\n\r\n");
-	}
+    // 1초마다 한 번씩 출력
+    if (millis() - showPrevmillis >= 1000) {
+        showPrevmillis = millis();
+        USART_TX_String("People count : ");
+        itoa(humanCount, buffer, 10);
+        USART_TX_String(buffer);
+        USART_TX_String("\r\n");
+        USART_TX_String("Car count : ");
+        itoa(carCount, buffer, 10);
+        USART_TX_String(buffer);
+        USART_TX_String("\r\n");
+        USART_TX_String("fluid time value : ");
+        itoa(fluidGreenTimeValue, buffer, 10);
+        USART_TX_String(buffer);
+        USART_TX_String("\r\n\r\n");
+    }
 }
 
 //main----------------------
@@ -355,7 +370,7 @@ int main(void)
 
     sei();//golbal interrrupt enable
 
-    DDRA |= 1 << SONAR_TRIG_PIN;
+    //GPIO
     DDRB = 0xFF;	// LCD data
     DDRC = 0xFF;	// LCD control
     DDRF = 0xFF;	// traffic light
@@ -389,18 +404,23 @@ int main(void)
         Print_Overview();
         Fluid_Traffic_Light_Adjust();
 
-        // 시작 1초 이후 신호 위반 감지했다면 0.5초동안 차량 경고
-        if (millis() > 1000 && millis() - carPrevmillis < 500) {
+        // 시작 1초 이후 신호 위반 감지했다면 2초동안 차량 경고
+        if (millis() > 3000 && millis() - carPrevmillis < 2000) {
             // 차량 경고
             PORTF |= 1 << BUZZER_PIN;
         }
-        // 시작 1초 이후 신호 위반 감지했다면 0.2초동안 보행자 경고
-        else if (millis() > 1000 && millis() - humanPrevmillis < 200) {
+        // 시작 1초 이후 신호 위반 감지했다면 3초동안 보행자 경고
+        else if (millis() > 3000 && millis() - humanPrevmillis < 3000) {
             // 보행자 경고
             PORTF |= 1 << BUZZER_PIN;
+            if (millis() / 500 % 2)
+                PORTF |= 1 << WARNING_LED;
+            else
+                PORTF &= ~(1 << WARNING_LED);
         } else {
-			//경고 
+            //경고
             PORTF &= ~(1 << BUZZER_PIN);
+			PORTF &= ~(1 << WARNING_LED);
         }
     }
 }
