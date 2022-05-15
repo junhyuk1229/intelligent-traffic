@@ -45,36 +45,35 @@ int tof = 0;//time of flight(10us)
 bool isRecv = false;//수신완료 여부
 bool isHigh = false;//Echo 핀 상태
 
-//util
-char buffer[10];
-#define LCD_CLEAR_BUFFER "                "
-
-//light
-#define CAR_YELLOW_TIME 5000
-int carRedTime = 10000;
+//overspeed
+#define OVERSPEED_LIMIT 75
 unsigned long overspeedDisplayStart = 0;
 #define OVERSPEED_DISPLAY_TIME 500
 
-//count
+//light
+int carRedTime = 10000;
+#define CAR_YELLOW_TIME 5000
 #define MIN_GREEN_TIME 9000	// 자동차 파란불 최소 시간 제한
 #define MAX_GREEN_TIME 120000	// 자동차 파란불 최대 시간 제한
+int fluidGreenTimeValue = 10000;	// 유동적으로 바꿀 파란불 시간 (second)
+
+//count
 double	adjustTime = 10.0 * 1000.0;	// 10 second (임시)
 int humanCount = 0;	// 사람 수
 int carCount = 0;	// 자동차 수
 int hours = 0;		// 시간
-int fluidGreenTimeValue = 10000;	// 유동적으로 바꿀 파란불 시간 (second)
-unsigned long countPrevmillis = 0;
-unsigned long showPrevmillis = 0;
-
 int prevDayTime[24];		// 다음에 사용될 시간이 저장되어있는 array
+unsigned long countPrevmillis = 0;
 
+//warning
 bool carWarningFlag = false;	// 차량 경고 플래그
 unsigned long carPrevmillis = 0;	// 차량 경고용
 unsigned long humanPrevmillis = 0;	// 보행자 경고용
 
-
-//LCD
-#define OVERSPEED_LIMIT 75
+//util
+char buffer[10];
+#define LCD_CLEAR_BUFFER "                "
+unsigned long showPrevmillis = 0;
 
 //UART----------------------
 
@@ -190,37 +189,7 @@ float Sonar_Get_Speed()//return speed in cm/s
     //((음속 / 음파 이동 횟수 / 단위보정(1m->100cm, 10us) * 시간차) / (샘플링 간격 / 단위보정(1s->1ms))
 }
 
-
-//Analog comparator----------------------
-
-ISR(INT3_vect)
-{
-    if (carWarningFlag) {
-        carPrevmillis = millis();	// 차량 경고
-
-        //PORTF = 0xFF;
-        //_delay_ms (500);
-        //PORTF = 0x00;
-
-    }
-    carCount++;
-}
-
-//Ext Interrupt----------------------
-ISR(INT2_vect)
-{
-    if (!carWarningFlag) {
-        humanPrevmillis = millis();	// 보행자 경고
-
-        //PORTF = 0xFF;
-        //_delay_ms (500);
-        //PORTF = 0x00;
-    }
-
-    humanCount++;
-
-
-}
+//Analog comparator & Ext Interrupt----------------------
 
 void Interrupt_Init()
 {
@@ -230,7 +199,6 @@ void Interrupt_Init()
     //ADCSRA |= 1 << ADEN;
     ACSR = (1 << ACIE);// | (1 << ACIS1) | (1 << ACIS0);
     */
-
 
     //Ext int
     EIMSK |= (1 << HUMAN_COUNT_PIN);
@@ -249,28 +217,29 @@ void Interrupt_Init()
     }
 }
 
-
-
-// 사람과 자동차 count, 유동적으로 바뀐 시간을 보여주는 함수
-void Print_Overview()
+ISR(INT3_vect)
 {
-    // 1초마다 한 번씩 출력
-    if (millis() - showPrevmillis >= 1000) {
-        showPrevmillis = millis();
-        USART_TX_String("People count : ");
-        itoa(humanCount, buffer, 10);
-        USART_TX_String(buffer);
-        USART_TX_String("\r\n");
-        USART_TX_String("Car count : ");
-        itoa(carCount, buffer, 10);
-        USART_TX_String(buffer);
-        USART_TX_String("\r\n");
-        USART_TX_String("fluid time value : ");
-        itoa(fluidGreenTimeValue, buffer, 10);
-        USART_TX_String(buffer);
-        USART_TX_String("\r\n\r\n");
+    if (carWarningFlag) {
+        carPrevmillis = millis();	// 차량 경고
+        //PORTF = 0xFF;
+        //_delay_ms (500);
+        //PORTF = 0x00;
     }
+    carCount++;
 }
+
+ISR(INT2_vect)
+{
+    if (!carWarningFlag) {
+        humanPrevmillis = millis();	// 보행자 경고
+        //PORTF = 0xFF;
+        //_delay_ms (500);
+        //PORTF = 0x00;
+    }
+    humanCount++;
+}
+
+//Fluid_Traffic----------------------
 
 // 교통량에 따라 신호를 유동적으로 변경
 void Fluid_Traffic_Light_Adjust()
@@ -295,7 +264,8 @@ void Fluid_Traffic_Light_Adjust()
     }
 }
 
-// LCD
+//LCD Alart----------------------
+
 void Speed_LCD_Alart(int spd) // spd 값에 따라 속도와 과속유무 LCD에 띄움
 {
 
@@ -327,7 +297,8 @@ void Speed_LCD_Alart(int spd) // spd 값에 따라 속도와 과속유무 LCD에
     }
 }
 
-// light system
+//light system----------------------
+
 void Traffic_Light_Cycle() 	// 자동차 기준 신호등
 {
     //나중에 보행자 신호등 같이 물릴거임
@@ -349,6 +320,30 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
     }
 }
 
+//Util & debug----------------------
+
+// 사람과 자동차 count, 유동적으로 바뀐 시간을 보여주는 함수
+void Print_Overview()
+{
+	// 1초마다 한 번씩 출력
+	if (millis() - showPrevmillis >= 1000) {
+		showPrevmillis = millis();
+		USART_TX_String("People count : ");
+		itoa(humanCount, buffer, 10);
+		USART_TX_String(buffer);
+		USART_TX_String("\r\n");
+		USART_TX_String("Car count : ");
+		itoa(carCount, buffer, 10);
+		USART_TX_String(buffer);
+		USART_TX_String("\r\n");
+		USART_TX_String("fluid time value : ");
+		itoa(fluidGreenTimeValue, buffer, 10);
+		USART_TX_String(buffer);
+		USART_TX_String("\r\n\r\n");
+	}
+}
+
+//main----------------------
 
 int main(void)
 {
@@ -394,18 +389,18 @@ int main(void)
         Print_Overview();
         Fluid_Traffic_Light_Adjust();
 
-        // 시작 3초 이후 신호 위반 감지했다면 3초동안 차량 경고
-        if (millis() > 3000 && millis() - carPrevmillis < 500) {
+        // 시작 1초 이후 신호 위반 감지했다면 0.5초동안 차량 경고
+        if (millis() > 1000 && millis() - carPrevmillis < 500) {
             // 차량 경고
             PORTF |= 1 << BUZZER_PIN;
-        } else
-            PORTF &= ~(1 << BUZZER_PIN);
-
-        // 시작 3초 이후 신호 위반 감지했다면 3초동안 보행자 경고
-        if (millis() > 3000 && millis() - humanPrevmillis < 500) {
+        }
+        // 시작 1초 이후 신호 위반 감지했다면 0.2초동안 보행자 경고
+        else if (millis() > 1000 && millis() - humanPrevmillis < 200) {
             // 보행자 경고
             PORTF |= 1 << BUZZER_PIN;
-        } else
+        } else {
+			//경고 
             PORTF &= ~(1 << BUZZER_PIN);
+        }
     }
 }
