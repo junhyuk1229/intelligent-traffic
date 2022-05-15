@@ -30,6 +30,8 @@
 #define BUZZER_PIN PF5
 #define WARNING_LED PF6
 
+#define SERVO_PIN PE5
+
 //lib
 #include <avr/io.h>
 #include <util/delay.h>
@@ -69,6 +71,11 @@ unsigned long countPrevmillis = 0;
 bool carWarningFlag = false;	// 차량 경고 플래그
 unsigned long carPrevmillis = 0;	// 차량 경고용
 unsigned long humanPrevmillis = 0;	// 보행자 경고용
+
+//servo
+#define PWM_FREQ 50//define the PWM frequency input to the servo motor(50Hz)
+int servoPos = 0;//servo positioin(in dgree)
+int prevPos = 0;
 
 //util
 char buffer[10];
@@ -231,7 +238,7 @@ ISR(ANALOG_COMP_vect)
 {
     if (carWarningFlag)
         carPrevmillis = millis();	// 차량 경고
-    if (millis() - prevTrgtime > DEBOUNCE_TIME) {
+    if (millis() - prevTrgtime > DEBOUNCE_TIME) {//노이즈 검사
         prevTrgtime = millis();
         carCount++;
     }
@@ -242,11 +249,13 @@ ISR(INT2_vect)
 {
     if (!carWarningFlag)
         humanPrevmillis = millis();	// 보행자 경고
-    if (millis() - prevTrgtime > DEBOUNCE_TIME) {
+    if (millis() - prevTrgtime > DEBOUNCE_TIME) {//디바운스 검사
         prevTrgtime = millis();
         humanCount++;
     }
 }
+
+//노이즈 문제를 줄이기 위해 comp 입력 및 ext interrupt입력에 병렬로 커패시터 연결할 필요가 있음
 
 //Fluid_Traffic----------------------
 
@@ -322,6 +331,8 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         //보행자 청색
         PORTF |= 1 << PEDESTRIAN_GREEN_LED;
         PORTF &= ~(1 << PEDESTRIAN_RED_LED);
+		//servo 위치 변경
+        servoPos = 180;
     } else if (currTime > fluidGreenTimeValue)	{//차량 황색
         PORTF |= 1 << VEHICLE_YELLOW_LED;
         PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
@@ -332,7 +343,30 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         //보행자 적색
         PORTF |= 1 << PEDESTRIAN_RED_LED;
         PORTF &= ~(1 << PEDESTRIAN_GREEN_LED);
+		//위치 변경
+        servoPos = 90;
     }
+}
+
+//Servo----------------------
+
+//PWM발생 함수, PWM 주파수 및 duty비 설정
+//16Bit Timer/Counter3를 사용(Timer/Counter1은 millis()함수에서 사용하고, Timer/Counter2은 ICRn이 없기 때문에 주파수 설정에 제약이 있어 사용 불가)
+//WGM(Waveform Generation Mode): 14
+//Fast PWM, TOP:ICR3, Update OCR3C:BOTTOM, TOV3 Flag set: TOP
+void PWM(unsigned long freq, float duty)
+{
+    TCCR3B &= 0b11111000;//stop timer for update
+
+    unsigned long period = (F_CPU / 8 / freq);//calculate the waveform period
+
+    ICR3 = period;//assign calculateed period
+    TCNT3 = period - 1;//initialize TCNT3 value to prevent jitter
+    OCR3C = period * duty / 100UL;//calculate duty ratio
+
+    TCCR3A |= (1 << COM3C1) | (1 << WGM31); //use OC3C(PE5) as output, non-inverting, Fast PWM mode
+    TCCR3B |= (1 << WGM33) | (1 << WGM32) | (1 << CS31); //fast PWM mode, prescaler division ratio 8
+    DDRE |= 1 << SERVO_PIN; //declare PWM output
 }
 
 //Util & debug----------------------
@@ -358,6 +392,12 @@ void Print_Overview()
     }
 }
 
+//map function, perform range mapping
+float map(float x, float in_min, float in_max, float out_min, float out_max)
+{
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
 //main----------------------
 
 int main(void)
@@ -376,6 +416,7 @@ int main(void)
     DDRF = 0xFF;	// traffic light
 
     LCD_Init();	// use port b and c
+
 
     /* Replace with your application code */
     while (1) {
@@ -404,12 +445,12 @@ int main(void)
         Print_Overview();
         Fluid_Traffic_Light_Adjust();
 
-        // 시작 1초 이후 신호 위반 감지했다면 2초동안 차량 경고
+        // 시작 3초 이후 신호 위반 감지했다면 2초동안 차량 경고
         if (millis() > 3000 && millis() - carPrevmillis < 2000) {
             // 차량 경고
             PORTF |= 1 << BUZZER_PIN;
         }
-        // 시작 1초 이후 신호 위반 감지했다면 3초동안 보행자 경고
+        // 시작 3초 이후 신호 위반 감지했다면 3초동안 보행자 경고
         else if (millis() > 3000 && millis() - humanPrevmillis < 3000) {
             // 보행자 경고
             PORTF |= 1 << BUZZER_PIN;
@@ -420,7 +461,11 @@ int main(void)
         } else {
             //경고
             PORTF &= ~(1 << BUZZER_PIN);
-			PORTF &= ~(1 << WARNING_LED);
+            PORTF &= ~(1 << WARNING_LED);
+        }
+        if (servoPos != prevPos) {
+            PWM(PWM_FREQ, map(servoPos, 0, 180, 2.5, 12.5));//value mapping and set PWM output
+            prevPos = servoPos;
         }
     }
 }
