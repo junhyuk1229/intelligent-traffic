@@ -41,6 +41,42 @@ Float Sonar_Get_Speed()	{
 	Calculate the speed of the car and return it’s value
 }
 
+Desc: Has no inputs or outputs. Sets the AC and INT2 to be used and sets the numbers of the prev time green time array to be used to save the time.
+Interrupt_Init()	{
+	Enable / Setup interrupt for AC and INT2
+	Reset prevDayTime array to the minimal green time
+}
+
+Desc: Gets called when the interrupt happens. Is used to send a warning if a car passes during a red light and count the number of cars passed
+ISR(ANALOG_COMP_vect)	{
+	if the carWarning is true
+		Set carPrevmillis to current time
+	If there is no noise
+		Add 1 to carCount
+}
+
+Desc: Gets called when the interrupt happens. Is used to send a warning if a pedestrian passes during a red light and count the number of pedestrians passing
+ISR(INT2_vect)	{
+	if the carWarning is false
+		Set humanPrevmillis to current time
+	If there is no noise
+		Add 1 to humanCount
+}
+
+Desc: Changes the green time for the car based on the cars passed and the humans crossed. Then saves the green time value to the array to be used for the next day. Lastly it takes the value from the array to get the next green time for use.
+Fluid_Traffic_Light_Adjust()	{
+	If a set of time passed after last trigger
+		Change fluidGreenTimeValue using carCount and humanCount
+		
+If fluidGreenTimeValue is greater than or less than the boundaries
+	Fix fluidGreen to the boundaries
+
+Reset carCount and humanCount to 0
+Save the current fluidGreenTimeValue to the array
+Move hour by 1
+Make the next fluidGreenTimeValue to the number in prevDayTime
+}
+
 Desc: Has no outputs but get the car’s speed as the input. Runs when the speed calculation is complete. Shows the speed of the car in cm/s and if the car’s speed is over the speed limit print a warning sign.
 Speed_LCD_Alert(int spd)	{
 	Clear the first row of the LCD
@@ -51,23 +87,44 @@ Speed_LCD_Alert(int spd)	{
 }
 
 Desc: Has no input and no output. Runs every main cycle to determine the traffic light’s color. Each color has a set amount of seconds to light up.
-Main_Traffic_light()	{
+Traffic_Light_Cycle()	{
 	Add all the times to get the total time for one cycle
 	Get the remainder of ms divided by the total time to get a time between 0 and the total time
 	If the remainder is greater than the red light time and the yellow light time combined then
 		Set the traffic light to green
+		Set carWarning to true
+		Set servoPos to 180
 	Else if the remainder is greater than the red light time then
 		Set the traffic light to yellow
 	Else
 		Set the traffic light to red
+		Set carWarning to false
+		Set servoPos to 90
+}
+
+Desc: Sets timer3 to be used for the servo motor.
+Void PWN(unsigned long freq, float duty)	{
+	Stop the PWM timer
+	Change motor based on duty
 }
 
 Desc: Every main cycle the sensor detects the speed of the car and prints the speed to the LCD and changes the traffic lights depending on the time passed.
 Int main()	{
 	Initialize timer to detect ms passed from start
 	Initialize sonar settings by calling Sonar_Init() and LCD by calling LCD_Init()
+	Initialize INT2 and AC by calling Interrupt_Init
 	Enable global interrupt and set the GPIO’s to output or input depending on the devices connected
 	Get the speed of the car by calling Sonar_Get_Speed
 	Print the speed to LCD by calling Speed_LCD_Alert
-	Change the traffic light by calling Main_Traffic_light
+	Change the traffic light by calling Traffic_Light_Cycle
+Save the time by calling Fluid_Traffic_Light_Adjust
+If carPrevmillis was set
+	Turn buzzer on for 2 seconds
+If humanPrevmillis was set
+	Turn buzzer on for 3 seconds
+	Toggle a LED to on and off
+If servoPos changed
+	Call PWM
 }
+
+
