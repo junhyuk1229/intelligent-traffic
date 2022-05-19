@@ -6,6 +6,15 @@
  */
 
 
+
+//test (all in cm)
+#define XDISTANCE 100
+#define YDISTANCE 100
+#define PI 3.14
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 //sys
 #define F_CPU 16000000UL
 #define BAUD 9600
@@ -38,6 +47,11 @@
 #include <util/delay.h>
 #include <avr/interrupt.h>
 #include <stdbool.h>
+
+
+//test
+#include <math.h>
+////////////////////////////////////////////////////////////////////////////////////////////////
 
 //ext lib
 #include "millis.h"
@@ -195,6 +209,19 @@ float Sonar_Get_Speed()//return speed in cm/s
     USART_TX_String("cm\r\n");
     */
 
+
+	
+    //test
+    if (t2 < 3800)	{
+        double radAngle = atan(YDISTANCE / (XDISTANCE - (0.34 * t2) / 2));
+	int degAngle = round(radAngle * 180 / PI);
+        if (degAngle < 0)	{
+	    degAngle = 180 + degAngle;
+	}
+	servoPos = degAngle;
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+
     //예외처리 Timeout
     if (t1 > 3800 || t2 > 3800)	return 0;
 
@@ -333,7 +360,6 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         PORTF |= 1 << PEDESTRIAN_GREEN_LED;
         PORTF &= ~(1 << PEDESTRIAN_RED_LED);
 		//servo 위치 변경
-        servoPos = 180;
     } else if (currTime > fluidGreenTimeValue)	{//차량 황색
         PORTF |= 1 << VEHICLE_YELLOW_LED;
         PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
@@ -345,7 +371,6 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         PORTF |= 1 << PEDESTRIAN_RED_LED;
         PORTF &= ~(1 << PEDESTRIAN_GREEN_LED);
 		//위치 변경
-        servoPos = 90;
     }
 }
 
