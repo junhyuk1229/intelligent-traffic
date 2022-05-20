@@ -5,7 +5,7 @@
  * Author : Flanon
  */
 
- //sys
+//sys
 #define F_CPU 16000000UL
 #define BAUD 9600
 #define MYUBRR F_CPU / 16 / BAUD - 1
@@ -52,18 +52,17 @@ bool isHigh = false;//Echo 핀 상태
 unsigned long overspeedDisplayStart = 0;
 #define OVERSPEED_DISPLAY_TIME 500
 
-//light
+//light timing(ms)
 #define CAR_GREEN_TIME 10000
 #define CAR_YELLOW_TIME 5000
 #define CAR_RED_TIME 10000
-#define MIN_GREEN_TIME 2000	// 자동차 파란불 최소 시간 제한
-#define MAX_GREEN_TIME -2000	// 자동차 파란불 최대 시간 제한
-
-int carfluidGreenTimeValue = 0;	// 유동적으로 바꿀 파란불 시간 (second)
-int carExtendGreenTimeValue = 0;
 
 //count
-double	adjustTime = 10.0 * 1000.0;	// 10 second (임시)
+int carfluidGreenTimeValue = 0;//유동적으로 바꿀 파란불 시간
+#define MIN_GREEN_TIME 2000//자동차 파란불 최소 시간 제한
+#define MAX_GREEN_TIME -2000//자동차 파란불 최대 시간 제한
+
+double adjustTime = 10.0 * 1000.0;	// 10 second (임시)
 int humanCount = 0;	// 사람 수
 int carCount = 0;	// 자동차 수
 int hours = 0;		// 시간
@@ -82,6 +81,9 @@ int prevPos = 0;
 
 //handicap
 bool isEnabled = false;
+bool isExecuted = true;
+int carExtendGreenTimeValue = 0;//연장시킬 차량 청색 신호 시간
+#define EXTEND_TIME -2000//차량 청색 신호 연장 시간(차량기준이므로 보행자 시간을 연장하기 위해서는 음수가 됨)
 
 //util
 char buffer[10];
@@ -156,9 +158,8 @@ ISR(INT1_vect)//EXT intterpupt, rising 혹은 falling edge 검사
 
         EICRA &= ~(1 << ISC10); //falling edge 검사로 전환
         isHigh = true;//ISR이 수행된 뒤 파형은 H 상태임
-    }
-    else if (isHigh) {//falling edge가 검출되고 파형이 H상태인 경우
-     //불필요한 ISR수행을 막기 위해 TOVF interrupt disable
+    } else if (isHigh) { //falling edge가 검출되고 파형이 H상태인 경우
+        //불필요한 ISR수행을 막기 위해 TOVF interrupt disable
         TIMSK &= ~(1 << TOIE0); // Timer 0 overflow interrupt disable
         isRecv = true;//tof 계산 완료
 
@@ -221,13 +222,13 @@ void Interrupt_Init()
     ACSR = (1 << ACIS1) | (1 << ACIS0);//Comparator Interrupt on Rising Output Edge
     ACSR |= (1 << ACIE);// Analog Comparator Interrupt Enable
 
-    
+
     //Ext int
     EIMSK |= (1 << INT3);
     // falling edge
     // use INT3
     EICRA |= (1 << ISC31);
-    
+
 
     //Ext int
     EIMSK |= (1 << HUMAN_COUNT_PIN);
@@ -322,8 +323,7 @@ void Speed_LCD_Alart(int spd) // spd 값에 따라 속도와 과속유무 LCD에
     if ((millis() - overspeedDisplayStart) < OVERSPEED_DISPLAY_TIME) {	//500ms동안 2번째 줄에 경고 문자열 출력
         LCD_setcursor(1, 0);
         LCD_wString("Too fast!!");
-    }
-    else {	//500ms 이후 2번째 줄 clear
+    } else {	//500ms 이후 2번째 줄 clear
         LCD_setcursor(1, 0);
         LCD_wString(LCD_CLEAR_BUFFER);
     }
@@ -331,15 +331,38 @@ void Speed_LCD_Alart(int spd) // spd 값에 따라 속도와 과속유무 LCD에
 
 //light system----------------------
 
+
 void Traffic_Light_Cycle() 	// 자동차 기준 신호등
 {
     //나중에 보행자 신호등 같이 물릴거임
     //모든 시간은 ms 기준
+	
+	//신호 연장이 지시된 경우 차량의 초록색 신호 길이를 줄임
+    if (isEnabled)
+        carExtendGreenTimeValue = EXTEND_TIME;
 
     int totalCycleTime = CAR_GREEN_TIME + CAR_YELLOW_TIME + CAR_RED_TIME;
     int currTime = millis() % totalCycleTime;
 
-    if (currTime < CAR_GREEN_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) {//차량 적색
+    if (currTime > CAR_GREEN_TIME + CAR_YELLOW_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) {//차량 적색
+        PORTF |= 1 << VEHICLE_RED_LED;
+        PORTF &= ~(1 << VEHICLE_YELLOW_LED | 1 << VEHICLE_GREEN_LED);
+        carWarningFlag = true;
+        //보행자 청색
+        PORTF |= 1 << PEDESTRIAN_GREEN_LED;
+        PORTF &= ~(1 << PEDESTRIAN_RED_LED);
+        //servo 위치 변경
+        servoPos = 180;
+		
+    } else if (currTime > CAR_GREEN_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) { //차량 황색
+        PORTF |= 1 << VEHICLE_YELLOW_LED;
+        PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
+
+        //차량의 신호가 청색에서 황색으로 바뀐 경우, 연장 수행 이후 신호 연장 명령을 철회 하기 위해 수행 완료 여부를 거짓으로 함
+        if (isEnabled)
+            isExecuted = false;
+
+    } else { //차량 청색
         PORTF |= 1 << VEHICLE_GREEN_LED;
         PORTF &= ~(1 << VEHICLE_RED_LED | 1 << VEHICLE_YELLOW_LED);
         carWarningFlag = false;
@@ -349,33 +372,14 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         //위치 변경
         servoPos = 90;
 
-       
-    }
-    else if (currTime < CAR_GREEN_TIME + CAR_YELLOW_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) {//차량 황색
-        PORTF |= 1 << VEHICLE_YELLOW_LED;
-        PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
-
-        if (isEnabled)
-			carExtendGreenTimeValue = -2000;
-		else
-			carExtendGreenTimeValue = 0;
-    }
-    else {//차량 청색
-		
-		isEnabled = false;
-		
-        PORTF |= 1 << VEHICLE_RED_LED;
-        PORTF &= ~(1 << VEHICLE_YELLOW_LED | 1 << VEHICLE_GREEN_LED);
-        carWarningFlag = true;
-        //보행자 청색
-        PORTF |= 1 << PEDESTRIAN_GREEN_LED;
-        PORTF &= ~(1 << PEDESTRIAN_RED_LED);
-        //servo 위치 변경
-        servoPos = 180;
+        //차량의 신호가 적색에서 청색으로 바뀐 경우 보행자 신호 연장이 성공적으로 수행된 경우이므로
+        if (isEnabled && !isExecuted) {//신호 연장 및 황색 루프 진입 여부 검사(신호 연장 명령이 의도치 않게 철회 되는 것을 막기 위한 목적)가 참인 경우,
+            isExecuted = true;//수행 완료 여부를 참으로
+            isEnabled = false;//신호 연장 여부를 거짓으로 한 뒤
+            carExtendGreenTimeValue = 0;//연장 시간 초기화
+        }
     }
 }
-
-
 
 //Servo----------------------
 
@@ -487,8 +491,7 @@ int main(void)
                 PORTF |= 1 << WARNING_LED;
             else
                 PORTF &= ~(1 << WARNING_LED);
-        }
-        else {
+        } else {
             //경고
             PORTF &= ~(1 << BUZZER_PIN);
             PORTF &= ~(1 << WARNING_LED);
