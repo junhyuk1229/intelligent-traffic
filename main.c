@@ -5,6 +5,16 @@
  * Author : Flanon
  */
 
+
+
+//test (all in cm)
+#define XDISTANCE 10
+#define YDISTANCE 10
+#define PI 3.14
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 //sys
 #define F_CPU 16000000UL
 #define BAUD 9600
@@ -37,6 +47,11 @@
 #include <util/delay.h>
 #include <avr/interrupt.h>
 #include <stdbool.h>
+
+
+//test
+#include <math.h>
+////////////////////////////////////////////////////////////////////////////////////////////////
 
 //ext lib
 #include "millis.h"
@@ -84,6 +99,11 @@ unsigned long showPrevmillis = 0;
 
 #define DEBOUNCE_TIME 30
 unsigned long prevTrgtime = 0;
+
+//pedetr fluid
+int redAlphaTime = 0;
+bool buttonFlag = false;
+bool greenCondition = false;
 
 //UART----------------------
 
@@ -193,6 +213,20 @@ float Sonar_Get_Speed()//return speed in cm/s
     USART_TX_String(buffer);
     USART_TX_String("cm\r\n");
     */
+
+
+	
+    //test
+    if (t2 < 3800)	{
+        double radAngle = atan(YDISTANCE / (XDISTANCE - (0.34 * t2) / 2));
+	int degAngle = round(radAngle * 180 / PI);
+        if (degAngle < 0)	{
+	    degAngle = 180 + degAngle;
+		}
+	servoPos = degAngle;
+	}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
 
     //예외처리 Timeout
     if (t1 > 3800 || t2 > 3800)	return 0;
@@ -321,7 +355,7 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
 {
     //나중에 보행자 신호등 같이 물릴거임
     //모든 시간은 ms 기준
-    int totalCycleTime = fluidGreenTimeValue + CAR_YELLOW_TIME + carRedTime;
+    int totalCycleTime = fluidGreenTimeValue + CAR_YELLOW_TIME + carRedTime + redAlphaTime;
     int currTime = millis() % totalCycleTime;
 
     if (currTime > fluidGreenTimeValue + CAR_YELLOW_TIME)	{//차량 적색
@@ -332,10 +366,12 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         PORTF |= 1 << PEDESTRIAN_GREEN_LED;
         PORTF &= ~(1 << PEDESTRIAN_RED_LED);
 		//servo 위치 변경
-        servoPos = 180;
     } else if (currTime > fluidGreenTimeValue)	{//차량 황색
         PORTF |= 1 << VEHICLE_YELLOW_LED;
         PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
+		//보행자 적색
+		PORTF |= 1 << PEDESTRIAN_RED_LED;
+		PORTF &= ~(1 << PEDESTRIAN_GREEN_LED);
     } else	{//차량 청색
         PORTF |= 1 << VEHICLE_GREEN_LED;
         PORTF &= ~(1 << VEHICLE_RED_LED | 1 << VEHICLE_YELLOW_LED);
@@ -344,7 +380,6 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         PORTF |= 1 << PEDESTRIAN_RED_LED;
         PORTF &= ~(1 << PEDESTRIAN_GREEN_LED);
 		//위치 변경
-        servoPos = 90;
     }
 }
 
