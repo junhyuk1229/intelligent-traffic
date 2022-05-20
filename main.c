@@ -5,7 +5,7 @@
  * Author : Flanon
  */
 
-//sys
+ //sys
 #define F_CPU 16000000UL
 #define BAUD 9600
 #define MYUBRR F_CPU / 16 / BAUD - 1
@@ -53,11 +53,16 @@ unsigned long overspeedDisplayStart = 0;
 #define OVERSPEED_DISPLAY_TIME 500
 
 //light
-int carRedTime = 10000;
+#define CAR_GREEN_TIME 10000
 #define CAR_YELLOW_TIME 5000
+#define CAR_RED_TIME 10000
 #define MIN_GREEN_TIME 9000	// 자동차 파란불 최소 시간 제한
 #define MAX_GREEN_TIME 120000	// 자동차 파란불 최대 시간 제한
+
+int changeGreenTime = 0;
+
 int fluidGreenTimeValue = 10000;	// 유동적으로 바꿀 파란불 시간 (second)
+
 
 //count
 double	adjustTime = 10.0 * 1000.0;	// 10 second (임시)
@@ -76,6 +81,11 @@ unsigned long humanPrevmillis = 0;	// 보행자 경고용
 #define PWM_FREQ 50//define the PWM frequency input to the servo motor(50Hz)
 int servoPos = 0;//servo positioin(in dgree)
 int prevPos = 0;
+
+//handicap
+bool isEnabled = false;
+bool isExecuted = false;
+int addGreenTime = 0;
 
 //util
 char buffer[10];
@@ -104,7 +114,7 @@ void USART_TX(unsigned char data)
 }
 
 //function to output string
-void USART_TX_String(const char *text)
+void USART_TX_String(const char* text)
 {
     while (*text != 0)//until the end of the string is reached
         USART_TX(*text++);//print each character in a string
@@ -150,8 +160,9 @@ ISR(INT1_vect)//EXT intterpupt, rising 혹은 falling edge 검사
 
         EICRA &= ~(1 << ISC10); //falling edge 검사로 전환
         isHigh = true;//ISR이 수행된 뒤 파형은 H 상태임
-    } else if (isHigh) {//falling edge가 검출되고 파형이 H상태인 경우
-        //불필요한 ISR수행을 막기 위해 TOVF interrupt disable
+    }
+    else if (isHigh) {//falling edge가 검출되고 파형이 H상태인 경우
+     //불필요한 ISR수행을 막기 위해 TOVF interrupt disable
         TIMSK &= ~(1 << TOIE0); // Timer 0 overflow interrupt disable
         isRecv = true;//tof 계산 완료
 
@@ -176,10 +187,10 @@ void Sonar_Get_Tof()
 float Sonar_Get_Speed()//return speed in cm/s
 {
     //정확도를 높이기 위해서는 두 sampling사이에 최소한의 작업만이 이루어져야 함
-    Sonar_Get_Tof ();
+    Sonar_Get_Tof();
     int t1 = tof;
-    _delay_ms (SAMPLING_INTERVAL);
-    Sonar_Get_Tof ();
+    _delay_ms(SAMPLING_INTERVAL);
+    Sonar_Get_Tof();
     int t2 = tof;
 
     /*
@@ -214,13 +225,13 @@ void Interrupt_Init()
     ACSR = (1 << ACIS1) | (1 << ACIS0);//Comparator Interrupt on Rising Output Edge
     ACSR |= (1 << ACIE);// Analog Comparator Interrupt Enable
 
-    /*
+    
     //Ext int
-    EIMSK |= (1 << VEHICLE_COUNT_PIN);
+    EIMSK |= (1 << INT3);
     // falling edge
     // use INT3
     EICRA |= (1 << ISC31);
-    */
+    
 
     //Ext int
     EIMSK |= (1 << HUMAN_COUNT_PIN);
@@ -228,7 +239,7 @@ void Interrupt_Init()
     // use INT2
     EICRA |= (1 << ISC21);
 
-    for (int i = 0; i < 24; i++)	{
+    for (int i = 0; i < 24; i++) {
         prevDayTime[i] = MIN_GREEN_TIME;
     }
 }
@@ -253,6 +264,12 @@ ISR(INT2_vect)
         prevTrgtime = millis();
         humanCount++;
     }
+}
+
+//ext
+ISR(INT3_vect)
+{
+    isEnabled = true;
 }
 
 //노이즈 문제를 줄이기 위해 comp 입력 및 ext interrupt입력에 병렬로 커패시터 연결할 필요가 있음
@@ -309,7 +326,8 @@ void Speed_LCD_Alart(int spd) // spd 값에 따라 속도와 과속유무 LCD에
     if ((millis() - overspeedDisplayStart) < OVERSPEED_DISPLAY_TIME) {	//500ms동안 2번째 줄에 경고 문자열 출력
         LCD_setcursor(1, 0);
         LCD_wString("Too fast!!");
-    } else {	//500ms 이후 2번째 줄 clear
+    }
+    else {	//500ms 이후 2번째 줄 clear
         LCD_setcursor(1, 0);
         LCD_wString(LCD_CLEAR_BUFFER);
     }
@@ -321,30 +339,51 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
 {
     //나중에 보행자 신호등 같이 물릴거임
     //모든 시간은 ms 기준
-    int totalCycleTime = fluidGreenTimeValue + CAR_YELLOW_TIME + carRedTime;
+
+    if (!isExecuted)
+        addGreenTime = 10000;
+    else
+        addGreenTime = 0;
+
+    int totalCycleTime = CAR_GREEN_TIME + CAR_YELLOW_TIME + CAR_RED_TIME;
     int currTime = millis() % totalCycleTime;
 
-    if (currTime > fluidGreenTimeValue + CAR_YELLOW_TIME)	{//차량 적색
+    if (currTime > CAR_GREEN_TIME + CAR_YELLOW_TIME + changeGreenTime) {//차량 적색
         PORTF |= 1 << VEHICLE_RED_LED;
         PORTF &= ~(1 << VEHICLE_YELLOW_LED | 1 << VEHICLE_GREEN_LED);
         carWarningFlag = true;
         //보행자 청색
         PORTF |= 1 << PEDESTRIAN_GREEN_LED;
         PORTF &= ~(1 << PEDESTRIAN_RED_LED);
-		//servo 위치 변경
+        //servo 위치 변경
         servoPos = 180;
-    } else if (currTime > fluidGreenTimeValue)	{//차량 황색
+    }
+    else if (currTime > CAR_GREEN_TIME) {//차량 황색
         PORTF |= 1 << VEHICLE_YELLOW_LED;
         PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
-    } else	{//차량 청색
+
+        //
+        //if (isEnabled)
+        //    isExecuted = false;
+    }
+    else {//차량 청색
         PORTF |= 1 << VEHICLE_GREEN_LED;
         PORTF &= ~(1 << VEHICLE_RED_LED | 1 << VEHICLE_YELLOW_LED);
         carWarningFlag = false;
         //보행자 적색
         PORTF |= 1 << PEDESTRIAN_RED_LED;
         PORTF &= ~(1 << PEDESTRIAN_GREEN_LED);
-		//위치 변경
+        //위치 변경
         servoPos = 90;
+
+        //
+        //is(isEnabled)
+        //    isExecuted = true;
+
+        //if (isEnabled && isExecuted) {
+        //    isExecuted = false;
+        //   isEnabled = false;
+        //}
     }
 }
 
@@ -433,7 +472,7 @@ int main(void)
         USART_TX_String("cm/s\r\n");
 
         if (spd > OVERSPEED_LIMIT) {//100cm/s의 속도를 초과하는 경우
-        	USART_TX_String("Speed limit has reached!!!\r\n");
+            USART_TX_String("Speed limit has reached!!!\r\n");
         }
         USART_TX_String("\r\n");
         */
@@ -458,7 +497,8 @@ int main(void)
                 PORTF |= 1 << WARNING_LED;
             else
                 PORTF &= ~(1 << WARNING_LED);
-        } else {
+        }
+        else {
             //경고
             PORTF &= ~(1 << BUZZER_PIN);
             PORTF &= ~(1 << WARNING_LED);
