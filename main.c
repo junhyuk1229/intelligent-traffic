@@ -56,13 +56,11 @@ unsigned long overspeedDisplayStart = 0;
 #define CAR_GREEN_TIME 10000
 #define CAR_YELLOW_TIME 5000
 #define CAR_RED_TIME 10000
-#define MIN_GREEN_TIME 9000	// 자동차 파란불 최소 시간 제한
-#define MAX_GREEN_TIME 120000	// 자동차 파란불 최대 시간 제한
+#define MIN_GREEN_TIME 2000	// 자동차 파란불 최소 시간 제한
+#define MAX_GREEN_TIME -2000	// 자동차 파란불 최대 시간 제한
 
-int changeGreenTime = 0;
-
-int fluidGreenTimeValue = 10000;	// 유동적으로 바꿀 파란불 시간 (second)
-
+int carfluidGreenTimeValue = 0;	// 유동적으로 바꿀 파란불 시간 (second)
+int carExtendGreenTimeValue = -2000;
 
 //count
 double	adjustTime = 10.0 * 1000.0;	// 10 second (임시)
@@ -240,7 +238,7 @@ void Interrupt_Init()
     EICRA |= (1 << ISC21);
 
     for (int i = 0; i < 24; i++) {
-        prevDayTime[i] = MIN_GREEN_TIME;
+        prevDayTime[i] = 0;
     }
 }
 
@@ -284,18 +282,18 @@ void Fluid_Traffic_Light_Adjust()
         countPrevmillis = millis();
 
         // 밑에 알고리즘 구성
-        fluidGreenTimeValue = fluidGreenTimeValue + carCount - humanCount;
+        carfluidGreenTimeValue = carfluidGreenTimeValue + (carCount - humanCount) * 200;
 
-        if (fluidGreenTimeValue < MIN_GREEN_TIME)	fluidGreenTimeValue = MIN_GREEN_TIME;
-        if (fluidGreenTimeValue > MAX_GREEN_TIME)	fluidGreenTimeValue = MAX_GREEN_TIME;
+        if (carfluidGreenTimeValue < MIN_GREEN_TIME)	carfluidGreenTimeValue = MIN_GREEN_TIME;
+        if (carfluidGreenTimeValue > MAX_GREEN_TIME)	carfluidGreenTimeValue = MAX_GREEN_TIME;
 
         // 변수 초기화
         carCount = 0, humanCount = 0;
 
         // 결과 시간 저장 + 다음 시간 불러오기
-        prevDayTime[hours] = fluidGreenTimeValue;
+        prevDayTime[hours] = carfluidGreenTimeValue;
         hours = (hours + 1) % 24;
-        fluidGreenTimeValue = prevDayTime[hours];
+        carfluidGreenTimeValue = prevDayTime[hours];
     }
 }
 
@@ -341,14 +339,14 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
     //모든 시간은 ms 기준
 
     if (!isExecuted)
-        addGreenTime = 10000;
+        carExtendGreenTimeValue = 2000;
     else
-        addGreenTime = 0;
+        carExtendGreenTimeValue = 0;
 
     int totalCycleTime = CAR_GREEN_TIME + CAR_YELLOW_TIME + CAR_RED_TIME;
     int currTime = millis() % totalCycleTime;
 
-    if (currTime > CAR_GREEN_TIME + CAR_YELLOW_TIME + changeGreenTime) {//차량 적색
+    if (currTime > CAR_GREEN_TIME + CAR_YELLOW_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) {//차량 적색
         PORTF |= 1 << VEHICLE_RED_LED;
         PORTF &= ~(1 << VEHICLE_YELLOW_LED | 1 << VEHICLE_GREEN_LED);
         carWarningFlag = true;
@@ -358,13 +356,13 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         //servo 위치 변경
         servoPos = 180;
     }
-    else if (currTime > CAR_GREEN_TIME) {//차량 황색
+    else if (currTime > CAR_GREEN_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) {//차량 황색
         PORTF |= 1 << VEHICLE_YELLOW_LED;
         PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
 
         //
-        //if (isEnabled)
-        //    isExecuted = false;
+        if (isEnabled)
+            isExecuted = false;
     }
     else {//차량 청색
         PORTF |= 1 << VEHICLE_GREEN_LED;
@@ -377,13 +375,13 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         servoPos = 90;
 
         //
-        //is(isEnabled)
-        //    isExecuted = true;
+        if(isEnabled)
+            isExecuted = true;
 
-        //if (isEnabled && isExecuted) {
-        //    isExecuted = false;
-        //   isEnabled = false;
-        //}
+        if (isEnabled && isExecuted) {
+            isExecuted = false;
+           isEnabled = false;
+        }
     }
 }
 
@@ -425,7 +423,7 @@ void Print_Overview()
         USART_TX_String(buffer);
         USART_TX_String("\r\n");
         USART_TX_String("fluid time value : ");
-        itoa(fluidGreenTimeValue, buffer, 10);
+        itoa(carfluidGreenTimeValue, buffer, 10);
         USART_TX_String(buffer);
         USART_TX_String("\r\n\r\n");
     }
@@ -482,7 +480,7 @@ int main(void)
         // use portF
         Traffic_Light_Cycle();
         Print_Overview();
-        Fluid_Traffic_Light_Adjust();
+        //Fluid_Traffic_Light_Adjust();
 
         // 시작 3초 이후 신호 위반 감지했다면 2초동안 차량 경고
         if (millis() > 3000 && millis() - carPrevmillis < 2000) {
