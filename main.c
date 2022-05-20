@@ -103,7 +103,7 @@ unsigned long prevTrgtime = 0;
 //pedetr fluid
 int redAlphaTime = 0;
 bool buttonFlag = false;
-bool greenCondition = false;
+bool pedeGreenCondition = false;
 
 //UART----------------------
 
@@ -359,6 +359,10 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
     int currTime = millis() % totalCycleTime;
 
     if (currTime > fluidGreenTimeValue + CAR_YELLOW_TIME)	{//차량 적색
+		pedeGreenCondition = false;
+		
+		redAlphaTime = 0;
+		
         PORTF |= 1 << VEHICLE_RED_LED;
         PORTF &= ~(1 << VEHICLE_YELLOW_LED | 1 << VEHICLE_GREEN_LED);
         carWarningFlag = true;
@@ -373,6 +377,15 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
 		PORTF |= 1 << PEDESTRIAN_RED_LED;
 		PORTF &= ~(1 << PEDESTRIAN_GREEN_LED);
     } else	{//차량 청색
+		
+		if(buttonFlag){
+			pedeGreenCondition = true;
+			buttonFlag = false;
+		}
+		if(pedeGreenCondition)	redAlphaTime = 10000;
+		else
+			redAlphaTime = 0;
+		
         PORTF |= 1 << VEHICLE_GREEN_LED;
         PORTF &= ~(1 << VEHICLE_RED_LED | 1 << VEHICLE_YELLOW_LED);
         carWarningFlag = false;
