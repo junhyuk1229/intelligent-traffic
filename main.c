@@ -217,8 +217,9 @@ float Sonar_Get_Speed()//return speed in cm/s
 	int degAngle = round(radAngle * 180 / PI);
         if (degAngle < 0)	{
 	    degAngle = 180 + degAngle;
-	}
+		}
 	servoPos = degAngle;
+	}
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
 
