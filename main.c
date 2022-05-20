@@ -60,7 +60,7 @@ unsigned long overspeedDisplayStart = 0;
 #define MAX_GREEN_TIME -2000	// 자동차 파란불 최대 시간 제한
 
 int carfluidGreenTimeValue = 0;	// 유동적으로 바꿀 파란불 시간 (second)
-int carExtendGreenTimeValue = -2000;
+int carExtendGreenTimeValue = 0;
 
 //count
 double	adjustTime = 10.0 * 1000.0;	// 10 second (임시)
@@ -82,8 +82,6 @@ int prevPos = 0;
 
 //handicap
 bool isEnabled = false;
-bool isExecuted = false;
-int addGreenTime = 0;
 
 //util
 char buffer[10];
@@ -338,33 +336,10 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
     //나중에 보행자 신호등 같이 물릴거임
     //모든 시간은 ms 기준
 
-    if (!isExecuted)
-        carExtendGreenTimeValue = 2000;
-    else
-        carExtendGreenTimeValue = 0;
-
     int totalCycleTime = CAR_GREEN_TIME + CAR_YELLOW_TIME + CAR_RED_TIME;
     int currTime = millis() % totalCycleTime;
 
-    if (currTime > CAR_GREEN_TIME + CAR_YELLOW_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) {//차량 적색
-        PORTF |= 1 << VEHICLE_RED_LED;
-        PORTF &= ~(1 << VEHICLE_YELLOW_LED | 1 << VEHICLE_GREEN_LED);
-        carWarningFlag = true;
-        //보행자 청색
-        PORTF |= 1 << PEDESTRIAN_GREEN_LED;
-        PORTF &= ~(1 << PEDESTRIAN_RED_LED);
-        //servo 위치 변경
-        servoPos = 180;
-    }
-    else if (currTime > CAR_GREEN_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) {//차량 황색
-        PORTF |= 1 << VEHICLE_YELLOW_LED;
-        PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
-
-        //
-        if (isEnabled)
-            isExecuted = false;
-    }
-    else {//차량 청색
+    if (currTime < CAR_GREEN_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) {//차량 적색
         PORTF |= 1 << VEHICLE_GREEN_LED;
         PORTF &= ~(1 << VEHICLE_RED_LED | 1 << VEHICLE_YELLOW_LED);
         carWarningFlag = false;
@@ -374,16 +349,33 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         //위치 변경
         servoPos = 90;
 
-        //
-        if(isEnabled)
-            isExecuted = true;
+       
+    }
+    else if (currTime < CAR_GREEN_TIME + CAR_YELLOW_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) {//차량 황색
+        PORTF |= 1 << VEHICLE_YELLOW_LED;
+        PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
 
-        if (isEnabled && isExecuted) {
-            isExecuted = false;
-           isEnabled = false;
-        }
+        if (isEnabled)
+			carExtendGreenTimeValue = -2000;
+		else
+			carExtendGreenTimeValue = 0;
+    }
+    else {//차량 청색
+		
+		isEnabled = false;
+		
+        PORTF |= 1 << VEHICLE_RED_LED;
+        PORTF &= ~(1 << VEHICLE_YELLOW_LED | 1 << VEHICLE_GREEN_LED);
+        carWarningFlag = true;
+        //보행자 청색
+        PORTF |= 1 << PEDESTRIAN_GREEN_LED;
+        PORTF &= ~(1 << PEDESTRIAN_RED_LED);
+        //servo 위치 변경
+        servoPos = 180;
     }
 }
+
+
 
 //Servo----------------------
 
