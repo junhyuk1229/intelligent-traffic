@@ -96,6 +96,7 @@ unsigned long prevTrgtime = 0;
 //UART----------------------
 
 //initialize USART ubrr, rx, tx, character size
+/*
 void USART_Init(unsigned int ubrr)
 {
     UBRR0H = (unsigned char)(ubrr >> 8);//set baud rate
@@ -103,21 +104,23 @@ void USART_Init(unsigned int ubrr)
     UCSR0B = (1 << RXEN0) | (1 << TXEN0);//receive and transmitter enable
     UCSR0C = (3 << UCSZ0);//8-bit character size
 }
-
+*/
 //function to write character to output
+/*
 void USART_TX(unsigned char data)
 {
     while (!(UCSR0A & (1 << UDRE0)));//if the data register is full, wait
     UDR0 = data;//write data to UDR0 register
 }
-
+*/
 //function to output string
+/*
 void USART_TX_String(const char* text)
 {
     while (*text != 0)//until the end of the string is reached
         USART_TX(*text++);//print each character in a string
 }
-
+*/
 //Sonar----------------------
 
 void Sonar_Init()
@@ -405,6 +408,7 @@ void PWM(unsigned long freq, float duty)
 //Util & debug----------------------
 
 // 사람과 자동차 count, 유동적으로 바뀐 시간을 보여주는 함수
+/*
 void Print_Overview()
 {
     // 1초마다 한 번씩 출력
@@ -424,7 +428,7 @@ void Print_Overview()
         USART_TX_String("\r\n\r\n");
     }
 }
-
+*/
 //map function, perform range mapping
 float map(float x, float in_min, float in_max, float out_min, float out_max)
 {
@@ -475,8 +479,8 @@ int main(void)
         // millis() 에 따라 led 점멸
         // use portF
         Traffic_Light_Cycle();
-        Print_Overview();
-        //Fluid_Traffic_Light_Adjust();
+        //Print_Overview();
+        Fluid_Traffic_Light_Adjust();
 
         // 시작 3초 이후 신호 위반 감지했다면 2초동안 차량 경고
         if (millis() > 3000 && millis() - carPrevmillis < 2000) {
