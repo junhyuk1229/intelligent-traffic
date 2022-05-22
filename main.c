@@ -32,6 +32,10 @@
 
 #define SERVO_PIN PE5
 
+#define EXTEND_TRIG_PIN INT3
+
+#define DEBUG_PIN PF7
+
 //lib
 #include <avr/io.h>
 #include <util/delay.h>
@@ -93,10 +97,12 @@ unsigned long showPrevmillis = 0;
 #define DEBOUNCE_TIME 30
 unsigned long prevTrgtime = 0;
 
+int currSig = 0;
+int prevSig = 0;
+
 //UART----------------------
 
 //initialize USART ubrr, rx, tx, character size
-/*
 void USART_Init(unsigned int ubrr)
 {
     UBRR0H = (unsigned char)(ubrr >> 8);//set baud rate
@@ -104,23 +110,21 @@ void USART_Init(unsigned int ubrr)
     UCSR0B = (1 << RXEN0) | (1 << TXEN0);//receive and transmitter enable
     UCSR0C = (3 << UCSZ0);//8-bit character size
 }
-*/
+
 //function to write character to output
-/*
 void USART_TX(unsigned char data)
 {
     while (!(UCSR0A & (1 << UDRE0)));//if the data register is full, wait
     UDR0 = data;//write data to UDR0 register
 }
-*/
+
 //function to output string
-/*
 void USART_TX_String(const char* text)
 {
     while (*text != 0)//until the end of the string is reached
         USART_TX(*text++);//print each character in a string
 }
-*/
+
 //Sonar----------------------
 
 void Sonar_Init()
@@ -227,7 +231,7 @@ void Interrupt_Init()
 
 
     //Ext int
-    EIMSK |= (1 << INT3);
+    EIMSK |= (1 << EXTEND_TRIG_PIN);
     // falling edge
     // use INT3
     EICRA |= (1 << ISC31);
@@ -339,8 +343,8 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
 {
     //나중에 보행자 신호등 같이 물릴거임
     //모든 시간은 ms 기준
-	
-	//신호 연장이 지시된 경우 차량의 초록색 신호 길이를 줄임
+
+    //신호 연장이 지시된 경우 차량의 초록색 신호 길이를 늘림
     if (isEnabled)
         carExtendGreenTimeValue = EXTEND_TIME;
 
@@ -356,7 +360,9 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         PORTF &= ~(1 << PEDESTRIAN_RED_LED);
         //servo 위치 변경
         servoPos = 180;
-		
+        //
+        currSig = 3;
+
     } else if (currTime > CAR_GREEN_TIME + carfluidGreenTimeValue + carExtendGreenTimeValue) { //차량 황색
         PORTF |= 1 << VEHICLE_YELLOW_LED;
         PORTF &= ~(1 << VEHICLE_GREEN_LED | 1 << VEHICLE_RED_LED);
@@ -364,6 +370,8 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         //차량의 신호가 청색에서 황색으로 바뀐 경우, 연장 수행 이후 신호 연장 명령을 철회 하기 위해 수행 완료 여부를 거짓으로 함
         if (isEnabled)
             isExecuted = false;
+        //
+        currSig = 2;
 
     } else { //차량 청색
         PORTF |= 1 << VEHICLE_GREEN_LED;
@@ -381,6 +389,8 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
             isEnabled = false;//신호 연장 여부를 거짓으로 한 뒤
             carExtendGreenTimeValue = 0;//연장 시간 초기화
         }
+        //
+        currSig = 1;
     }
 }
 
@@ -408,7 +418,6 @@ void PWM(unsigned long freq, float duty)
 //Util & debug----------------------
 
 // 사람과 자동차 count, 유동적으로 바뀐 시간을 보여주는 함수
-/*
 void Print_Overview()
 {
     // 1초마다 한 번씩 출력
@@ -428,7 +437,7 @@ void Print_Overview()
         USART_TX_String("\r\n\r\n");
     }
 }
-*/
+
 //map function, perform range mapping
 float map(float x, float in_min, float in_max, float out_min, float out_max)
 {
@@ -479,8 +488,8 @@ int main(void)
         // millis() 에 따라 led 점멸
         // use portF
         Traffic_Light_Cycle();
-        //Print_Overview();
-        Fluid_Traffic_Light_Adjust();
+        Print_Overview();
+        //Fluid_Traffic_Light_Adjust();
 
         // 시작 3초 이후 신호 위반 감지했다면 2초동안 차량 경고
         if (millis() > 3000 && millis() - carPrevmillis < 2000) {
@@ -500,9 +509,20 @@ int main(void)
             PORTF &= ~(1 << BUZZER_PIN);
             PORTF &= ~(1 << WARNING_LED);
         }
+
+        //
         if (servoPos != prevPos) {
             PWM(PWM_FREQ, map(servoPos, 0, 180, 2.5, 12.5));//value mapping and set PWM output
             prevPos = servoPos;
         }
+
+        /* for debugging
+        if (currSig != prevSig) {
+            PORTF |= 1 << DEBUG_PIN;
+            _delay_ms (50);
+            PORTF &= ~(1 << DEBUG_PIN);
+            prevSig = currSig;
+        }
+	*/
     }
 }
