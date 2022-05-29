@@ -359,7 +359,7 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         PORTF |= 1 << PEDESTRIAN_GREEN_LED;
         PORTF &= ~(1 << PEDESTRIAN_RED_LED);
         //servo 위치 변경
-        servoPos = 180;
+        servoPos = 25;
         //
         currSig = 3;
 
@@ -381,7 +381,7 @@ void Traffic_Light_Cycle() 	// 자동차 기준 신호등
         PORTF |= 1 << PEDESTRIAN_RED_LED;
         PORTF &= ~(1 << PEDESTRIAN_GREEN_LED);
         //위치 변경
-        servoPos = 90;
+        servoPos = 97;
 
         //차량의 신호가 적색에서 청색으로 바뀐 경우 보행자 신호 연장이 성공적으로 수행된 경우이므로
         if (isEnabled && !isExecuted) {//신호 연장 및 황색 루프 진입 여부 검사(신호 연장 명령이 의도치 않게 철회 되는 것을 막기 위한 목적)가 참인 경우,
@@ -516,13 +516,13 @@ int main(void)
             prevPos = servoPos;
         }
 
-        /* for debugging
+        // for debugging
         if (currSig != prevSig) {
             PORTF |= 1 << DEBUG_PIN;
             _delay_ms (50);
             PORTF &= ~(1 << DEBUG_PIN);
             prevSig = currSig;
         }
-	*/
+		
     }
 }
