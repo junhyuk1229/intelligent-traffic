@@ -1,9 +1,34 @@
-/*
- * Test2.crm
- *
- * Created: 2022-05-01 오후 17:04:32
- * Author : Flanon
- */
+/************************************************************************
+Title:    Intelligent_Traffic_Management_System
+
+Author:		Group1
+
+			12151228 Kim Gyeong Hyeon(김경현)
+			main idea draft, flowcharts
+			responsible code: USART_Init(), USART_TX/TX_String(), Speed_LCD_Alart(), Print_Overview(), main()
+
+			12161427 Kim Jun Hyuk(김준혁)
+			general translation, presentation, extra part idea/code design
+			responsible code: Fluid_Traffic_Light_Adjust(), Traffic_Light_Cycle(), main()
+
+			12161762 Lee Yeong Jun(이영준)
+			making of presentation file(ppt)/presentation material
+			responsible code: main()
+
+			12171505 Shin Yu Seung(신유승, a.k.a. Flanon) <sus2607@gmail.com>  https://blog.naver.com/sinu8361
+			overall hardware/software architecture design, sonar/traffic light cycle algorithms, block diagram, making of mock-up, power consumption measurement
+			responsible code: Sonar_Init(), Sonar_Get_Tof/Speed(), ISR(Timer, Analog Comparator, Ext. Interrupt), Interrupt_Init(), Traffic_Light_Cycle(), PWM(), map(), main()
+
+File:     V1.0 30/05/2022 12:33:05 PM
+Software: AVR-GCC 4.x, AVR Libc 1.4 or higher
+Hardware: ATmega128
+Usage:    Intelligent_Traffic_Management_System
+
+LICENSE:
+    Copyright (C) 2021-2022, CC BY-NC-ND 2.0 KR
+    이 프로그램은 시제품 제작 용도로 작성되었으며, 상업적 이용을 금함
+
+************************************************************************/
 
 //sys
 #define F_CPU 16000000UL
@@ -66,11 +91,12 @@ int carfluidGreenTimeValue = 0;//유동적으로 바꿀 파란불 시간
 #define MIN_GREEN_TIME 2000//자동차 파란불 최소 시간 제한
 #define MAX_GREEN_TIME -2000//자동차 파란불 최대 시간 제한
 
-double adjustTime = 10.0 * 1000.0;	// 10 second (임시)
+double adjustTime = 25.0 * 1000.0;	// 10 second (임시)
 int humanCount = 0;	// 사람 수
 int carCount = 0;	// 자동차 수
 int hours = 0;		// 시간
 int prevDayTime[24];		// 다음에 사용될 시간이 저장되어있는 array
+//int prevDayTime[23] = {0,2000,-2000,1000,-1000,0};
 unsigned long countPrevmillis = 0;
 
 //warning
@@ -489,7 +515,7 @@ int main(void)
         // use portF
         Traffic_Light_Cycle();
         Print_Overview();
-        //Fluid_Traffic_Light_Adjust();
+        Fluid_Traffic_Light_Adjust();
 
         // 시작 3초 이후 신호 위반 감지했다면 2초동안 차량 경고
         if (millis() > 3000 && millis() - carPrevmillis < 2000) {
@@ -516,13 +542,13 @@ int main(void)
             prevPos = servoPos;
         }
 
-        // for debugging
+        /* for debugging
         if (currSig != prevSig) {
             PORTF |= 1 << DEBUG_PIN;
             _delay_ms (50);
             PORTF &= ~(1 << DEBUG_PIN);
             prevSig = currSig;
         }
-		
+        */
     }
 }
